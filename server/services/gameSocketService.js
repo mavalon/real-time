@@ -62,27 +62,32 @@ const Controller = {
                     thisRank = rank;
                     Controller.isGameOver();
                 }
+                socket.emit('updatePlayer', {
+                    id: player.id,
+                    percent: pct,
+                    rank: thisRank
+                });
                 break;
             }
         };
-        socket.emit('updatePlayer', {
-            id: player.id,
-            percent: pct,
-            rank: thisRank
-        });
     },
 
     isGameOver() {
         let hasIncompletePlayers = false;
         let hasTime = (ticks > 0);
         if (hasTime) {
+            console.log(players.length);
             for(let i = 0; i < players.length; i++) {
-                if (players[i].percent < 100) hasIncompletePlayers = true;
+                console.log(players[i].percent);
+                if (players[i].percent < 100) {
+                    hasIncompletePlayers = true;
+                }
                 break;
             }
         }
         if ((!hasIncompletePlayers) || (!hasTime)){
-            console.log('game over');
+            //console.log(hasIncompletePlayers);
+            //console.log(hasTime);
             Controller.gameOver();
         }
     },
@@ -112,7 +117,9 @@ const Controller = {
     gameOver() {
         players = [];
         sentence = null;
+        rank = 0;
         socket.emit('gameOver', {});
+        Controller.initRound();
     }
 };
 

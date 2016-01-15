@@ -63,8 +63,9 @@ app.use(function(err, req, res, next) {
 //Initialize the socket service through the http protocol and pass it into gameService to be configured.
 gameService(io);
 
-http.listen(4000, function(){
-    console.log('listening on *:4000');
+
+http.listen(3001, function(){
+    console.log('listening on *:3001');
 });
 /*
 // create the socket.io handlers
