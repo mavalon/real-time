@@ -1,0 +1,88 @@
+body {
+  padding: 50px;
+  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+}
+a {
+  color: #00b7ff;
+}
+#sentence,
+#again,
+.panel,
+#status.counting #state,
+#status #gameCountdown {
+  display: none;
+}
+.panel.show,
+#alert.show,
+#game .show,
+#status.counting #gameCountdown,
+.gameOver #again {
+  display: block;
+}
+textarea {
+  max-width: 500px;
+  height: 100px;
+  resize: none;
+  width: 100%;
+}
+#game.playing textarea {
+  border-color: #f00;
+}
+#game #race {
+  border: solid 1px #000;
+  border-radius: 5px;
+  max-width: 500px;
+}
+#game .bar {
+  min-height: 20px;
+  width: 100%;
+  margin: 5px auto;
+}
+#game .label {
+  margin: 5px 5px;
+}
+#game .percentage {
+  margin: 5px 5px;
+  width: 50%;
+  height: 20px;
+  background-color: #ccc;
+  color: #fff;
+}
+.btn {
+  margin: 10px auto;
+  color: #eceded;
+  width: 100%;
+  height: 33px;
+  max-width: 80vw;
+  text-align: center;
+  font-family: "BrandonTextWeb-Bold", system, -apple-system, ".SFNSDisplay-Regular", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 18px;
+  line-height: 2.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 3px;
+  background-color: #6aade4;
+  -webkit-transition: background-color 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53);
+  transition: background-color 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53);
+}
+#alert {
+  background-color: #f00;
+  bottom: -40px;
+  position: absolute;
+  z-index: 10;
+  left: 0;
+  width: 100%;
+  color: #fff;
+  font-weight: bold;
+  height: 40px;
+  padding: 5px 0;
+  line-height: 18px;
+  text-align: center;
+  transition: bottom 2s, opacity 1s;
+  opacity: 0;
+}
+#alert.show {
+  bottom: 0;
+  opacity: 1;
+}

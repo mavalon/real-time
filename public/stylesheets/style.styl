@@ -4,6 +4,11 @@ body
 a
   color: #00B7FF
 
+#sentence, #again, .panel, #status.counting #state, #status #gameCountdown
+    display: none;
+
+.panel.show, #alert.show, #game .show, #status.counting #gameCountdown, .gameOver #again
+    display: block;
 
 textarea
     max-width: 500px;
@@ -11,8 +16,6 @@ textarea
     resize: none;
     width: 100%;
 
-#sentence
-    display: none
 
 #game
     &.playing {
@@ -20,9 +23,7 @@ textarea
             border-color: red;
         }
     }
-    .show {
-        display: block;
-    }
+
     #race
       border: solid 1px black;
       border-radius: 5px;
@@ -42,14 +43,6 @@ textarea
         background-color: #ccc;
         color: #fff;
 
-    #status
-        &.counting
-            #state
-                display:none
-            #gameCountdown
-                display:block
-        #gameCountdown
-            display:none;
 .btn {
   margin: 10px auto;
   color: #eceded;
@@ -88,15 +81,5 @@ textarea
     &.show {
         bottom: 0;
         opacity: 1;
-        display: block;
     }
 }
-
-.panel {
-    display:none;
-
-    &.show {
-        display: block;
-    }
-}
-
