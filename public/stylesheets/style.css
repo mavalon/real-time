@@ -5,20 +5,28 @@ body {
 a {
   color: #00b7ff;
 }
+#sentence,
+#again,
+.panel,
+#status.counting #state,
+#status #gameCountdown {
+  display: none;
+}
+.panel.show,
+#alert.show,
+#game .show,
+#status.counting #gameCountdown,
+.gameOver #again {
+  display: block;
+}
 textarea {
   max-width: 500px;
   height: 100px;
   resize: none;
   width: 100%;
 }
-#sentence {
-  display: none;
-}
 #game.playing textarea {
   border-color: #f00;
-}
-#game .show {
-  display: block;
 }
 #game #race {
   border: solid 1px #000;
@@ -39,15 +47,6 @@ textarea {
   height: 20px;
   background-color: #ccc;
   color: #fff;
-}
-#game #status.counting #state {
-  display: none;
-}
-#game #status.counting #gameCountdown {
-  display: block;
-}
-#game #status #gameCountdown {
-  display: none;
 }
 .btn {
   margin: 10px auto;
@@ -86,11 +85,4 @@ textarea {
 #alert.show {
   bottom: 0;
   opacity: 1;
-  display: block;
-}
-.panel {
-  display: none;
-}
-.panel.show {
-  display: block;
 }

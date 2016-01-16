@@ -32,6 +32,7 @@ RealTime.prototype = {
     },
 
     joinGame: function() {
+        $('#game').removeClass('gameOver');
         $('#race').html('');
         $('textarea').val('').attr('readonly', 'true');
         socket.emit('join', {
@@ -98,10 +99,10 @@ RealTime.prototype = {
         rt.updateState(PLAYING_MSG);
     },
 
-    endGame: function() {
+    endGame: function(data) {
         $('textarea').attr('readonly', true);
-        $('#game').removeClass('playing');
-        rt.updateState(GAME_OVER_MSG);
+        $('#game').removeClass('playing').addClass('gameOver');
+        rt.updateState((data.message) ? data.message : GAME_OVER_MSG);
     },
 
     updateState: function(msg) {
@@ -140,6 +141,7 @@ RealTime.prototype = {
         });
 
         socket.on('updatePlayers', function(data) {
+            console.log(data);
             rt.props.players = data.players;
             rt.props.sentence = data.sentence;
             rt.updateRace();
