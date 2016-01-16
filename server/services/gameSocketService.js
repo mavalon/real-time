@@ -2,6 +2,8 @@
 
 var fs = require('fs');
 const COUNTDOWN_SECONDS = 15;
+const GAME_MAX_SECONDS = 30;
+const MAX_PLAYERS_PER_GAME = 5;
 
 let socket = null;
 let hasPlayer = false;
@@ -9,19 +11,27 @@ let secondsRemaining = 0;
 let players = [];
 let rank = 0;
 let sentence = null;
-let ticks = 30;
+let ticks = GAME_MAX_SECONDS;
+
+let roomNumber = 1;
+
+let currentRoom = 'room_1';
+
+let rooms = [];
+let usernames = [];
 
 const Controller = {
 
     join(user) {
         players.push(user);
+        //usernames[user.name] = user.name;
         if (secondsRemaining === 0) {
             secondsRemaining = COUNTDOWN_SECONDS;
             Controller.countdown(COUNTDOWN_SECONDS);
         }
 
         hasPlayer = true;
-        Controller.updatePlayers();
+        Controller.updatePlayers(user);
     },
 
     roundStart() {
@@ -30,11 +40,11 @@ const Controller = {
 
     countdown(sec) {
         socket.emit('gameNotification', { seconds: secondsRemaining});
-        setTimeout(() => {
+        global.setTimeout(() => {
             if (secondsRemaining > 0) {
                 Controller.countdown(secondsRemaining--);
             } else {
-                ticks = 60;
+                ticks = GAME_MAX_SECONDS;
                 Controller.tick(ticks);
             }
         }, 1000);
@@ -88,7 +98,7 @@ const Controller = {
         if ((!hasIncompletePlayers) || (!hasTime)){
             //console.log(hasIncompletePlayers);
             //console.log(hasTime);
-            Controller.gameOver();
+            Controller.gameOver(`Game Over`);
         }
     },
 
@@ -105,21 +115,34 @@ const Controller = {
     },
 
     tick(sec) {
-        setTimeout(() => {
+        global.setTimeout(() => {
             if (ticks > 0) {
-                Controller.tick(ticks--);
+                ticks--;
+                Controller.tick(ticks);
             } else {
-                Controller.gameOver();
+                Controller.gameOver(`Time's up!`);
             }
         }, 1000);
     },
 
-    gameOver() {
+    gameOver(message) {
         players = [];
         sentence = null;
         rank = 0;
-        socket.emit('gameOver', {});
+        socket.emit('gameOver', {message: message});
         Controller.initRound();
+    },
+    getRoomToJoin() {
+        let r = null;
+        for (let x = 0; x < rooms.length; x++) {
+            let room = rooms[x];
+            if (room.players.length < MAX_PLAYERS_PER_GAME && !room.gameStarted) {
+                r = room;
+                break;
+            }
+        }
+        if (!r) r = new Room();
+        return r;
     }
 };
 
@@ -128,9 +151,35 @@ module.exports = (io) => {
     io.on('connection', (socket) => {
         console.log('a user connected');
         Controller.initRound();
-        socket.on('join' , Controller.join);
+
+        let room = Controller.getRoomToJoin();
+
+        socket.on('join', (user) => {
+
+            user.room = room;
+            socket.username = user.name;
+            socket.join(room.name);
+            Controller.join(user);
+        });
+
+        //socket.on('join' , Controller.join);
         socket.on('getSentence', Controller.getSentence);
         socket.on('updatePercent' , Controller.updatePercent);
         socket.on('roundStart' , Controller.roundStart);
     });
 };
+
+var Room = () => {
+    this.name = `room${roomNumber++}`;
+};
+Room.prototype = {
+    name: '',
+    players: [],
+    ticks: GAME_MAX_SECONDS,
+    rank: 0,
+    sentence: null,
+    secondsRemaining: 0,
+    hasPlayer: false,
+    socket: null,
+    gameStarted: false
+}
