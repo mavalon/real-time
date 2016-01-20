@@ -1,0 +1,31 @@
+extends layout
+block content
+    div(id="lobby", data-step="1", class="panel show")
+        div(class="start-game-select")
+            div(class="btn") SINGLE PLAYER
+            div(class="btn") TXT BATTLE
+            div(class="btn join nav", data-panel="name") REAL TIME
+    div(id="name", data-step="2", class="panel")
+        div
+            h3 Enter your name
+            input(type="textbox", id="username")
+            br
+            input(type="button", id="enter", value="Enter", class="nav btn", data-panel="game")
+    div(id="game", data-step="3", class="panel")
+        div(id="status", class="counting")
+            div(id="state") Type away!
+            div(id="gameCountdown")
+                span(class="countdown") 60
+                | &nbsp; seconds to go...
+        div(id="race")
+        p(class="sentence")
+        div
+            textarea(readonly)
+            div(id="sentence")
+            div(id="again",class="btn") Play another
+    section(id="alert", data-panel="name", class="join")
+        | A live challenge is happening in&nbsp;
+        span(id="alertCountdown", class="countdown") 60
+        | &nbsp;seconds
+        br
+        | Click here to join in the fun!

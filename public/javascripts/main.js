@@ -1,6 +1,7 @@
 var socket = io();
 var idGen = new Generator();
 var rt;
+var roomIndex = 0;
 
 var PLAYING_MSG = 'Type away!';
 var GAME_OVER_MSG = 'Game over!';
@@ -133,7 +134,7 @@ RealTime.prototype = {
             }
         });
         socket.on('updatePlayer', function(data) {
-            console.log(data);
+            //console.log(data);
             var player = data;
             var div = $('#'+player.id).find('.percentage');
             $(div).width(player.percent+'%');
@@ -141,9 +142,10 @@ RealTime.prototype = {
         });
 
         socket.on('updatePlayers', function(data) {
-            console.log(data);
+            //console.log(data);
             rt.props.players = data.players;
             rt.props.sentence = data.sentence;
+            rt.props.number = data.number;
             rt.updateRace();
         });
 
