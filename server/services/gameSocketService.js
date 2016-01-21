@@ -51,6 +51,10 @@ Room.prototype = {
     },
 
     countdown(sec) {
+        if (sec===COUNTDOWN_SECONDS)
+        {
+            io.sockets.emit('broadcastGame', { seconds: sec});
+        }
         io.sockets.to(this.name).emit('gameNotification', { seconds: this.secondsRemaining});
         setTimeout(() => {
             if (this.secondsRemaining > 0) {
@@ -143,7 +147,8 @@ Room.prototype = {
 
     roundStart() {
         io.sockets.to(this.name).emit('startGame', {});
-    }
+    },
+
 };
 
 const Controller = {

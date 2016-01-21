@@ -118,6 +118,17 @@ RealTime.prototype = {
 
         rt.props.idGen = new Generator();
         rt.props.myId = idGen.getId();
+        socket.on('broadcastGame', function(data) {
+            if (rt.props.currentPanel === 'lobby')
+            {
+                $('#alert').addClass('show');
+                console.log(data.seconds);
+                setTimeout(function() {
+                    $('#alert').removeClass('show');
+                }, data.seconds*1000);
+            }
+
+        });
         socket.on('gameNotification', function(data) {
             $('.countdown').text(data.seconds);
             if (data.seconds > 0) {
