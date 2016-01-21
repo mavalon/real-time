@@ -2,67 +2,105 @@
 
 var fs = require('fs');
 const COUNTDOWN_SECONDS = 15;
+const MAX_PLAYERS_PER_GAME = 5;
+const GAME_MAX_SECONDS = 60;
 
-let socket = null;
-let hasPlayer = false;
-let secondsRemaining = 0;
-let players = [];
-let rank = 0;
-let sentence = null;
-let ticks = 30;
+let io = null;
+let rooms = [];
 
-const Controller = {
+let Room = function() {
+    this.initRound(rooms.length);
+    return this;
+};
 
-    join(user) {
-        players.push(user);
-        if (secondsRemaining === 0) {
-            secondsRemaining = COUNTDOWN_SECONDS;
-            Controller.countdown(COUNTDOWN_SECONDS);
-        }
+Room.prototype = {
+    name: '',
+    players: [],
+    ticks: GAME_MAX_SECONDS,
+    rank: 0,
+    sentence: null,
+    secondsRemaining: 0,
+    hasPlayer: false,
+    socket: null,
+    gameStarted: false,
+    index: 0,
+    number: 0,
 
-        hasPlayer = true;
-        Controller.updatePlayers();
+    initRound(roomNumber) {
+
+        if (this.sentence) return;
+        this.players = [];
+        this.ticks = GAME_MAX_SECONDS;
+        this.number = roomNumber;
+        this.name = `room${roomNumber++}`;
+        const obj = JSON.parse(fs.readFileSync('./data/sentences.json', 'utf8'));
+        const idx = Math.floor((Math.random() * obj.length) + 1);
+        this.sentence = (obj[idx]);
+        io.sockets.to(this.name).emit('setSentence', this.sentence);
     },
 
-    roundStart() {
-        socket.emit('startGame', {});
+    join(user) {
+        this.players.push(user);
+        if (this.secondsRemaining === 0) {
+            this.secondsRemaining = COUNTDOWN_SECONDS;
+            this.countdown(COUNTDOWN_SECONDS);
+        }
+
+        this.hasPlayer = true;
+        this.updatePlayers();
     },
 
     countdown(sec) {
-        socket.emit('gameNotification', { seconds: secondsRemaining});
+        io.sockets.to(this.name).emit('gameNotification', { seconds: this.secondsRemaining});
         setTimeout(() => {
-            if (secondsRemaining > 0) {
-                Controller.countdown(secondsRemaining--);
+            if (this.secondsRemaining > 0) {
+                this.countdown(this.secondsRemaining--);
+                this.gameStarted = false;
             } else {
-                ticks = 60;
-                Controller.tick(ticks);
+                this.gameStarted = true;
+                this.ticks = GAME_MAX_SECONDS;
+                this.tick(this.ticks);
+            }
+        }, 1000);
+    },
+    updatePlayers() {
+        console.log('updatePlayers 1');
+        io.sockets.to(this.name).emit('updatePlayers', {
+            players: this.players,
+            sentence: this.sentence,
+            roomNumber: this.number
+        });
+
+    },
+
+    tick(sec) {
+        setTimeout(() => {
+            if (this.ticks > 0) {
+                this.tick(this.ticks--);
+            } else {
+                this.gameOver();
             }
         }, 1000);
     },
 
-    updatePlayers() {
-        console.log('updatePlayers 1');
-        socket.emit('updatePlayers', {
-            players: players,
-            sentence: sentence
-        });
-
+    getSentence() {
+        return this.sentence;
     },
 
     updatePercent(player) {
         let thisRank = 0;
         let pct = 0;
-        for(let i = 0; i < players.length; i++) {
-            pct = parseInt(players[i].percent);
-            if ((pct < (100)) && (players[i].id === player.id)) {
+        for(let i = 0; i < this.players.length; i++) {
+            pct = parseInt(this.players[i].percent);
+            if ((pct < (100)) && (this.players[i].id === player.id)) {
                 pct = player.percent;
-                players[i].percent = pct;
+                this.players[i].percent = pct;
                 if (pct === 100) {
-                    rank++;
-                    thisRank = rank;
-                    Controller.isGameOver();
+                    this.rank++;
+                    thisRank = this.rank;
+                    this.isGameOver();
                 }
-                socket.emit('updatePlayer', {
+                io.sockets.to(this.name).emit('updatePlayer', {
                     id: player.id,
                     percent: pct,
                     rank: thisRank
@@ -72,14 +110,24 @@ const Controller = {
         };
     },
 
+    gameOver() {
+        this.players = [];
+        this.sentence = null;
+        this.rank = 0;
+        this.ticks = 0;
+
+        io.sockets.to(this.name).emit('gameOver', {});
+        //this.initRound();
+    },
+
     isGameOver() {
         let hasIncompletePlayers = false;
-        let hasTime = (ticks > 0);
+        let hasTime = (this.ticks > 0);
         if (hasTime) {
-            console.log(players.length);
-            for(let i = 0; i < players.length; i++) {
-                console.log(players[i].percent);
-                if (players[i].percent < 100) {
+            console.log(this.players.length);
+            for(let i = 0; i < this.players.length; i++) {
+                console.log(this.players[i].percent);
+                if (this.players[i].percent < 100) {
                     hasIncompletePlayers = true;
                 }
                 break;
@@ -88,49 +136,77 @@ const Controller = {
         if ((!hasIncompletePlayers) || (!hasTime)){
             //console.log(hasIncompletePlayers);
             //console.log(hasTime);
-            Controller.gameOver();
+            this.gameOver();
         }
     },
 
-    initRound() {
-        if (sentence) return;
-        const obj = JSON.parse(fs.readFileSync('./data/sentences.json', 'utf8'));
-        const idx = Math.floor((Math.random() * obj.length) + 1);
-        sentence = (obj[idx]);
-        socket.emit('setSentence', sentence);
-    },
 
-    getSentence() {
-        return sentence;
-    },
-
-    tick(sec) {
-        setTimeout(() => {
-            if (ticks > 0) {
-                Controller.tick(ticks--);
-            } else {
-                Controller.gameOver();
-            }
-        }, 1000);
-    },
-
-    gameOver() {
-        players = [];
-        sentence = null;
-        rank = 0;
-        socket.emit('gameOver', {});
-        Controller.initRound();
+    roundStart() {
+        io.sockets.to(this.name).emit('startGame', {});
     }
 };
 
+const Controller = {
+
+    getRoomToJoin() {
+        let r = null;
+        for (let x = 0; x < rooms.length; x++) {
+            let room = rooms[x];
+            if (room.players.length < MAX_PLAYERS_PER_GAME && !room.gameStarted) {
+                r = room;
+                break;
+            }
+        }
+        if (!r) {
+            r = new Room();
+            rooms.push(r);
+        }
+        console.log(r.name);
+        return r;
+    }
+};
+/*
+
 module.exports = (io) => {
-    socket = io;
-    io.on('connection', (socket) => {
+    io = io;
+    socket = io.socket;
+    io.sockets.on('connection', (socket) => {
         console.log('a user connected');
         Controller.initRound();
         socket.on('join' , Controller.join);
         socket.on('getSentence', Controller.getSentence);
         socket.on('updatePercent' , Controller.updatePercent);
         socket.on('roundStart' , Controller.roundStart);
+    });
+};
+*/
+module.exports = (inout) => {
+     io = inout;
+     io.sockets.on('connection', (socket) => {
+        console.log('a user connected');
+
+        socket.on('join', (user) => {
+
+            if (user.room) {
+                io.socket.leave(user.room);
+            }
+            let room = Controller.getRoomToJoin();
+            user.room = room.name;
+            user.number = room.number;
+            socket.username = user.name;
+            socket.join(room.name);
+            room.join(user);
+        });
+
+        //socket.on('join' , Controller.join);
+        socket.on('getSentence', (user) => {
+            rooms[user.number].getSentence();
+        });
+        socket.on('updatePercent' , (user) => {
+            rooms[user.number].updatePercent(user);
+        });
+        socket.on('roundStart' , (user) => {
+            rooms[user.number].roundStart();
+        });
     });
 };

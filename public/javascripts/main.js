@@ -28,7 +28,8 @@ RealTime.prototype = {
         currentPanel: 'lobby',
         gameId: 0,
         myId: '',
-        sentence: null
+        sentence: null,
+        room: 0
     },
 
     joinGame: function() {
@@ -82,7 +83,8 @@ RealTime.prototype = {
         if (percentComplete > 100) percentComplete = 100;
         const data = {
             percent: percentComplete,
-            id: rt.props.myId
+            id: rt.props.myId,
+            number: rt.props.number
         };
         socket.emit('updatePercent', data);
     },
@@ -140,8 +142,10 @@ RealTime.prototype = {
         });
 
         socket.on('updatePlayers', function(data) {
+            console.log(data);
             rt.props.players = data.players;
             rt.props.sentence = data.sentence;
+            rt.props.number = data.roomNumber;
             rt.updateRace();
         });
 
