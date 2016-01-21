@@ -1,10 +1,23 @@
 'use strict';
+
+let dotenv = require('dotenv');
+dotenv.load();
+
 var express = require('express');
 var path = require('path');
 var favicon = require('serve-favicon');
 var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
+
+// redis sessions
+var env = require('./server/config/env');
+var redis = require('redis');
+var ExpressSession = require('express-session');
+var connectRedis = require('connect-redis');
+var RedisStore = connectRedis(ExpressSession);
+var rClient = redis.createClient(env.redis.port, env.redis.host, env.redis.options);
+var sessionStore = new RedisStore({client: rClient});
 
 var routes = require('./routes/index');
 var users = require('./routes/users');
@@ -67,35 +80,5 @@ gameService(io);
 http.listen(3001, function(){
     console.log('listening on *:3001');
 });
-/*
-// create the socket.io handlers
-io.on('connect', function(socket) {
 
-    // if there are already two players connected, tell the user that the server is full
-    if (numberOfPlayers == 2) {
-        socket.emit('serverFull', {});
-        return;
-    }
-
-    var playerIndex = numberOfPlayers++;
-
-    // right upon connecting, tell the player whether they're the left or right player (0 or 1)
-    socket.emit('identity', { playerIndex: playerIndex });
-
-    // when the player requests to be moved...
-    socket.on('moveRequest', function(data) {
-        playerCoordinates[playerIndex].x = data.x;
-        playerCoordinates[playerIndex].y = data.y;
-    });
-
-    // if this is the second player connecting, let's start the game
-    if (numberOfPlayers == 2) {
-        io.emit('startGame', {}); // let all connected players know that the game has started
-        var tickInterval = setInterval(function() {
-            moveBall();
-        }, 16);
-    }
-
-});
-*/
 module.exports = app;

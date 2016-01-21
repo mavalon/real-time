@@ -147,7 +147,7 @@ Room.prototype = {
 
     roundStart() {
         io.sockets.to(this.name).emit('startGame', {});
-    },
+    }
 
 };
 
