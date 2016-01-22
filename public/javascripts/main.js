@@ -48,6 +48,7 @@ RealTime.prototype = {
     joinGame: function() {
         $('#race').html('');
         $('textarea').val('').attr('readonly', 'true');
+        rt.state.myId = $('#id').val();
         socket.emit('join', {
             id: rt.state.myId,
             name: $('#username').val(),

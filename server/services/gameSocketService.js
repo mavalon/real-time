@@ -57,25 +57,30 @@ Room.prototype = {
         // broadcast to current room
         io.sockets.to(_self.state.name).emit('setSentence', _self.state.sentence);
 
-
     },
 
     // new user joins room/game
-    join(user) {
+    join(user, add) {
 
         // todo: check if user exists in list before adding
+        let _self = this;
 
         // add user to list of players
-        this.state.players.push(user);
+        Controller.setUser(add, user, this.state.number, function(err, added) {
 
-        // start countdown if first player in the room
-        if (this.state.secondsRemaining === 0) {
-            this.state.secondsRemaining = COUNTDOWN_SECONDS;
-            this.countdown(COUNTDOWN_SECONDS);
-        }
+            if (added) {
+                _self.state.players.push(user);
+            }
+            // start countdown if first player in the room
+            if (_self.state.secondsRemaining === 0) {
+                _self.state.secondsRemaining = COUNTDOWN_SECONDS;
+                _self.countdown(COUNTDOWN_SECONDS);
+            }
 
-        //broadcast all players to all players
-        this.updatePlayers();
+            //broadcast all players to all players
+            _self.updatePlayers();
+        });
+
     },
 
     // countdown to start of game
@@ -230,6 +235,12 @@ const Controller = {
 
 
     },
+    canJoinRoom(userId, roomId, cb) {
+        redis.exists(`game:${roomId}:user:${userId}`, function(err, exists) {
+           if (err) return cb(err);
+           cb(null, !(!!exists));
+        });
+    },
     getRoomById(id) {
 
         for(let x=0; x < rooms.length;x++) {
@@ -239,6 +250,17 @@ const Controller = {
             }
         }
         return null;
+    },
+    setUser(addUser, user, number, cb) {
+
+        if (!addUser) return cb(null, false);
+        const key = `game:${number}:user:${user.id}`;
+        const args = ["name", user.name, "color", user.color, "percent", user.percent, "rank", user.rank];
+
+        redis.hmset(key, args, function(err, res) {
+            if (err) return cb(err, false);
+            cb(null, true);
+        });
     }
 };
 
@@ -263,8 +285,16 @@ module.exports = (inout, rclient) => {
                 user.room = room.state.name;
                 user.number = room.state.number;
                 socket.username = user.name;
-                socket.join(room.state.name);
-                room.join(user);
+
+                // todo: verify user is unique to this room
+                Controller.canJoinRoom(user.id, room.number, function(err, canJoin) {
+                    if (canJoin) {
+                        socket.join(room.state.name);
+                    }
+                    room.join(user, canJoin);
+                });
+
+
             });
         });
 
