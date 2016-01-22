@@ -10,15 +10,14 @@ var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 
-
 // redis sessions
-var env = require('./server/config/env');
-var redis = require('redis');
-var ExpressSession = require('express-session');
-var connectRedis = require('connect-redis');
-var RedisStore = connectRedis(ExpressSession);
-var rClient = redis.createClient(env.redis.port, env.redis.host, env.redis.options);
-var sessionStore = new RedisStore({client: rClient});
+let env = require('./server/config/env');
+let redis = require('redis');
+let ExpressSession = require('express-session');
+let connectRedis = require('connect-redis');
+let RedisStore = connectRedis(ExpressSession);
+let rClient = redis.createClient(env.redis.port, env.redis.host, env.redis.options);
+let sessionStore = new RedisStore({client: rClient});
 
 var routes = require('./routes/index');
 var users = require('./routes/users');

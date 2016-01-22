@@ -1,29 +1,41 @@
-var socket = io();
-var idGen = new Generator();
-var rt;
+'use strict';
 
-var PLAYING_MSG = 'Type away!';
-var GAME_OVER_MSG = 'Game over!';
+let socket = io();
+let idGen = new Generator();
+let rt;
+
+const PLAYING_MSG = 'Type away!';
+const GAME_OVER_MSG = 'Game over!';
 
 $(document).ready(function() {
 
     rt = new RealTime();
     rt.init();
+
+    // display panel
     $('.nav,#alert').click(rt.goToPanel);
-    $('#enter,#again').click(rt.joinGame);
+
+    // join game
+    $('#enter,#again,#alert').click(rt.joinGame);
+
+    // update user progress
     $('textarea').keyup(rt.setPercent);
 
+    // generate random user on click
+    $('.randuser').click(rt.loadRandomUser);
+
+    // generate random user on load
+    rt.loadRandomUser();
 });
 
-var RealTime = function (options) {
-
+let RealTime = function (options) {
     this.options = $.extend({}, options);
-
 };
 
 RealTime.prototype = {
 
-    props: {
+    // state bag for current user's game/room/view
+    state: {
         players: [],
         currentPanel: 'lobby',
         gameId: 0,
@@ -32,42 +44,45 @@ RealTime.prototype = {
         room: 0
     },
 
+    // join current active game (or start one)
     joinGame: function() {
         $('#race').html('');
         $('textarea').val('').attr('readonly', 'true');
         socket.emit('join', {
-            id: rt.props.myId,
+            id: rt.state.myId,
             name: $('#username').val(),
             color: rt.getRandomColor(),
-            percent: 0.5,
+            percent: 0.5, // .5 to show something initially
             rank: 0
         });
     },
 
+    // show/hide panels
     goToPanel: function() {
 
-        rt.props.currentPanel = $(this).data('panel');
+        rt.state.currentPanel = $(this).data('panel');
         $('div').removeClass('show');
-        $('#'+rt.props.currentPanel).addClass('show');
+        $('#'+rt.state.currentPanel).addClass('show');
 
-        if (rt.props.currentPanel!=='lobby')
+        if (rt.state.currentPanel!=='lobby')
             $('#alert').removeClass('show');
 
     },
 
+    // display all player progress bars
     updateRace: function() {
 
-        var html = '';
-        var outer = document.createElement('div');
-        $('p.sentence,#sentence').text(rt.props.sentence.sentence);
-        $.each(rt.props.players, function(index, user) {
-            var div = document.createElement('div');
-            var pct = document.createElement('div');
-            var lbl = document.createElement('div');
-            var w = this.percent+'%';
-            var b = $(pct).css('width');
+        let html = '';
+        let outer = document.createElement('div');
+        $('p.sentence,#sentence').text(rt.state.sentence.sentence);
+        $.each(rt.state.players, function(index, user) {
+            let div = document.createElement('div');
+            let pct = document.createElement('div');
+            let lbl = document.createElement('div');
+            let w = this.percent+'%';
+            let b = $(pct).css('width');
 
-            if (rt.props.myId===user.id) $(lbl).css('font-weight', 'bold');
+            if (rt.state.myId===user.id) $(lbl).css('font-weight', 'bold');
             $(lbl).addClass('label').text(this.name);
             $(pct).addClass('percentage').width(w).css('background-color', this.color);
             $(div).attr('id', user.id).addClass('bar').append(lbl).append(pct);
@@ -76,23 +91,26 @@ RealTime.prototype = {
         $('#race').html($(outer).html());
     },
 
+    // broadcast player's score
     setPercent: function() {
-        var sentenceLength = $('#sentence').text().length;
-        var typedLength = $('textarea').val().length;
-        var percentComplete = (typedLength / sentenceLength)*100;
+        const sentenceLength = $('#sentence').text().length;
+        const typedLength = $('textarea').val().length;
+        let percentComplete = (typedLength / sentenceLength)*100;
         if (percentComplete > 100) percentComplete = 100;
         const data = {
             percent: percentComplete,
-            id: rt.props.myId,
-            number: rt.props.number
+            id: rt.state.myId,
+            number: rt.state.number
         };
         socket.emit('updatePercent', data);
     },
 
+    // generate a random color
     getRandomColor: function() {
         return "rgb(" + this._r() + "," + this._r() + "," + this._r() + ")";
     },
 
+    // race begins
     startGame: function() {
 
         $('textarea').removeAttr('readonly').focus();
@@ -100,26 +118,33 @@ RealTime.prototype = {
         rt.updateState(PLAYING_MSG);
     },
 
+    // race ends
     endGame: function() {
         $('textarea').attr('readonly', true);
         $('#game').removeClass('playing');
         rt.updateState(GAME_OVER_MSG);
     },
 
+    // echo message
     updateState: function(msg) {
         $('#state').text(msg);
     },
 
+    // random number
     _r: function() {
         return Math.floor(Math.random()*256);
     },
 
+    // handle socket notifications and set initial state
     init: function() {
 
-        rt.props.idGen = new Generator();
-        rt.props.myId = idGen.getId();
+        rt.state.idGen = new Generator();
+        rt.state.myId = idGen.getId();
+
+        // if another user starts a new game when current user is not playing a game,
+        // display an alert inviting user to play real time game
         socket.on('broadcastGame', function(data) {
-            if (rt.props.currentPanel === 'lobby')
+            if (rt.state.currentPanel === 'lobby')
             {
                 $('#alert').addClass('show');
                 console.log(data.seconds);
@@ -129,47 +154,66 @@ RealTime.prototype = {
             }
 
         });
-        socket.on('gameNotification', function(data) {
+
+        // update countdown on the game view
+        socket.on('broadcastCountdown', function(data) {
             $('.countdown').text(data.seconds);
             if (data.seconds > 0) {
                 $('#status').addClass('counting');
 
-                if (rt.props.currentPanel === 'lobby')
+                /*
+                if (rt.state.currentPanel === 'lobby')
                     $('#alert').addClass('show');
+                */
 
             } else {
                 $('#status').removeClass('counting');
-                $('#alert').removeClass('show');
+                //$('#alert').removeClass('show');
                 $('textarea').removeAttr('readonly');
                 rt.startGame();
             }
         });
+
+        // update another player's progress bar
         socket.on('updatePlayer', function(data) {
             console.log(data);
-            var player = data;
-            var div = $('#'+player.id).find('.percentage');
+            let player = data;
+            let div = $('#'+player.id).find('.percentage');
             $(div).width(player.percent+'%');
             if (player.rank > 0) $(div).text(data.rank);
         });
 
+        // reset view for all players' progress bars
         socket.on('updatePlayers', function(data) {
             console.log(data);
-            rt.props.players = data.players;
-            rt.props.sentence = data.sentence;
-            rt.props.number = data.roomNumber;
+            rt.state.players = data.players;
+            rt.state.sentence = data.sentence;
+            rt.state.number = data.roomNumber;
             rt.updateRace();
         });
 
+        // set game sentence (broadcast to all users in a particular room)
         socket.on('setSentence', function(data) {
-            if (!rt.props.sentence)  rt.props.sentence = (data);
-            $('p.sentence,#sentence').text(rt.props.sentence.sentence);
+            if (!rt.state.sentence)  rt.state.sentence = (data);
+            $('p.sentence,#sentence').text(rt.state.sentence.sentence);
         });
 
+        // change status to game over (disable textarea)
         socket.on('gameOver', rt.endGame);
-    }
 
+    },
+
+    // for get random user for testing purposes
+    loadRandomUser: function() {
+        $.get('/data/fbusers.json', function(json) {
+           let user = (json[Math.floor(Math.random() * json.length)]);
+            $('#id').val(user.id);
+            $('#username').val(user.username);
+        });
+    }
 };
 
+// generate random id
 function Generator() {};
 Generator.prototype.rand =  Math.floor(Math.random() * 26) + Date.now();
 Generator.prototype.getId = function() {
