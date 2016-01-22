@@ -11,10 +11,10 @@ let rooms = [];
 let redis = null;
 
 // each game play is a room
-let Room = function() {
+let Room = function(id) {
 
     // initialize with new index
-    this.initRound(rooms.length);
+    this.initRound(id);
     return this;
 
 };
@@ -41,27 +41,22 @@ Room.prototype = {
         if (this.state.sentence) return;
         let _self = this;
 
-        getNewRoomName(function(err, id) {
-            if (!err) {
+        _self.state.players = [];
+        _self.state.ticks = GAME_MAX_SECONDS;
+        _self.state.number = roomNumber;
 
-                _self.state.players = [];
-                _self.state.ticks = GAME_MAX_SECONDS;
-                _self.state.number = id;
-                //this.state.number = roomNumber;
+        //todo: get new room name
+        _self.state.name = `room${roomNumber}`;
 
-                //todo: get new room name
-                _self.state.name = `room${id}`;
+        // todo: get sentence from database
+        // currently pulling random sentence from json file
+        const obj = JSON.parse(fs.readFileSync('./data/sentences.json', 'utf8'));
+        const idx = Math.floor((Math.random() * obj.length) + 1);
+        _self.state.sentence = (obj[idx]);
 
-                // todo: get sentence from database
-                // currently pulling random sentence from json file
-                const obj = JSON.parse(fs.readFileSync('./data/sentences.json', 'utf8'));
-                const idx = Math.floor((Math.random() * obj.length) + 1);
-                _self.state.sentence = (obj[idx]);
+        // broadcast to current room
+        io.sockets.to(_self.state.name).emit('setSentence', _self.state.sentence);
 
-                // broadcast to current room
-                io.sockets.to(_self.state.name).emit('setSentence', _self.state.sentence);
-            }
-        });
 
     },
 
@@ -162,7 +157,7 @@ Room.prototype = {
         this.state.ticks = 0;
 
         io.sockets.to(this.state.name).emit('gameOver', {});
-        setNewRoomName();
+        //setNewRoomNumber(function(err, res) {});
     },
 
     // get current status of game based on time remaining and how many players completed the sentence
@@ -186,23 +181,24 @@ Room.prototype = {
 
 };
 
-function getNewRoomName(cb) {
+function getCurrentRoomNumber(cb) {
 
     redis.get('room:current', function(err, id) {
 
-        if (err) return cb(err);
+        if (err || !id) {
+            setNewRoomNumber(function(err, id) {
+               if (err) return;
+                cb(null, id);
+            });
+        } else {
+            cb(null, id)
+        }
 
-        if (id) return cb(err, id);
-
-        setNewRoomName(function (err, id) {
-            cb(null, id);
-
-        });
     })
 
 
 };
-function setNewRoomName(cb) {
+function setNewRoomNumber(cb) {
     redis.incr('room:current', function(err, id) {
         if (err) return cb(err);
         cb(null, id);
@@ -219,15 +215,20 @@ const Controller = {
             let room = rooms[x];
             if (room.state.players.length < MAX_PLAYERS_PER_GAME && !room.state.gameStarted) {
                 r = room;
-                break;
+                return cb(null, r);
             }
         }
-        if (!r) {
-            r = new Room();
-            rooms.push(r);
-        }
-        console.log(r.state.name);
-        cb(null,r);
+
+        setNewRoomNumber(function(err, number) {
+            if (err) return cb(err);
+            if (!err) {
+                r = new Room(number);
+                rooms.push(r);
+                cb(null, r);
+            }
+        });
+
+
     },
     getRoomById(id) {
 
