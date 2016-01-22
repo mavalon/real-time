@@ -4,19 +4,26 @@ const COUNTDOWN_SECONDS = 15;
 const MAX_PLAYERS_PER_GAME = 5;
 const GAME_MAX_SECONDS = 60;
 
+let util = require('../libs/utility');
 let fs = require('fs');
 let io = null;
 let rooms = [];
+let redis = null;
 
 // each game play is a room
 let Room = function() {
+
+    // initialize with new index
     this.initRound(rooms.length);
     return this;
+
 };
 
 Room.prototype = {
 
     socket: null,
+
+    // game state
     state: {
         name: '',
         players: [],
@@ -24,55 +31,83 @@ Room.prototype = {
         rank: 0,
         sentence: null,
         secondsRemaining: 0,
-        //hasPlayer: false,
         gameStarted: false,
-        //index: 0,
         number: 0
     },
 
+    // initialize game
     initRound(roomNumber) {
 
         if (this.state.sentence) return;
-        this.state.players = [];
-        this.state.ticks = GAME_MAX_SECONDS;
-        this.state.number = roomNumber;
-        this.state.name = `room${roomNumber++}`;
-        const obj = JSON.parse(fs.readFileSync('./data/sentences.json', 'utf8'));
-        const idx = Math.floor((Math.random() * obj.length) + 1);
-        this.state.sentence = (obj[idx]);
-        io.sockets.to(this.state.name).emit('setSentence', this.state.sentence);
+        let _self = this;
+
+        getNewRoomName(function(err, id) {
+            if (!err) {
+
+                _self.state.players = [];
+                _self.state.ticks = GAME_MAX_SECONDS;
+                _self.state.number = id;
+                //this.state.number = roomNumber;
+
+                //todo: get new room name
+                _self.state.name = `room${id}`;
+
+                // todo: get sentence from database
+                // currently pulling random sentence from json file
+                const obj = JSON.parse(fs.readFileSync('./data/sentences.json', 'utf8'));
+                const idx = Math.floor((Math.random() * obj.length) + 1);
+                _self.state.sentence = (obj[idx]);
+
+                // broadcast to current room
+                io.sockets.to(_self.state.name).emit('setSentence', _self.state.sentence);
+            }
+        });
+
     },
 
+    // new user joins room/game
     join(user) {
+
+        // todo: check if user exists in list before adding
+
+        // add user to list of players
         this.state.players.push(user);
+
+        // start countdown if first player in the room
         if (this.state.secondsRemaining === 0) {
             this.state.secondsRemaining = COUNTDOWN_SECONDS;
             this.countdown(COUNTDOWN_SECONDS);
         }
 
-        //this.state.hasPlayer = true;
+        //broadcast all players to all players
         this.updatePlayers();
     },
 
+    // countdown to start of game
     countdown(sec) {
+        // if new game, announce that to all inactive players that a real-time game's about to start
         if (sec===COUNTDOWN_SECONDS)
         {
-            io.sockets.emit('broadcastGame', { seconds: sec});
         }
+        io.sockets.emit('broadcastGame', { seconds: sec});
+
+        // announce seconds to game (to users in the room waiting to play)
         io.sockets.to(this.state.name).emit('broadcastCountdown', { seconds: this.state.secondsRemaining});
         setTimeout(() => {
             if (this.state.secondsRemaining > 0) {
                 this.countdown(this.state.secondsRemaining--);
                 this.state.gameStarted = false;
             } else {
+                // start the game, start timer
                 this.state.gameStarted = true;
                 this.state.ticks = GAME_MAX_SECONDS;
                 this.tick(this.state.ticks);
             }
         }, 1000);
     },
+
+    // broadcast game state to all players
     updatePlayers() {
-        console.log('updatePlayers 1');
         io.sockets.to(this.state.name).emit('updatePlayers', {
             players: this.state.players,
             sentence: this.state.sentence,
@@ -81,6 +116,7 @@ Room.prototype = {
 
     },
 
+    // timer to end of game
     tick(sec) {
         setTimeout(() => {
             if (this.state.ticks > 0) {
@@ -91,10 +127,7 @@ Room.prototype = {
         }, 1000);
     },
 
-    getSentence() {
-        return this.state.sentence;
-    },
-
+    // on player keypress, update percentage completed
     updatePercent(player) {
         let thisRank = 0;
         let pct = 0;
@@ -109,6 +142,8 @@ Room.prototype = {
                     thisRank = this.state.rank;
                     this.isGameOver();
                 }
+
+                // broadcast to room player's current progress
                 io.sockets.to(this.state.name).emit('updatePlayer', {
                     id: player.id,
                     percent: pct,
@@ -119,6 +154,7 @@ Room.prototype = {
         };
     },
 
+    // set state to game over, and broadcast to room to end game
     gameOver() {
         this.state.players = [];
         this.state.sentence = null;
@@ -126,8 +162,10 @@ Room.prototype = {
         this.state.ticks = 0;
 
         io.sockets.to(this.state.name).emit('gameOver', {});
+        setNewRoomName();
     },
 
+    // get current status of game based on time remaining and how many players completed the sentence
     isGameOver() {
         let hasIncompletePlayers = false;
         let hasTime = (this.state.ticks > 0);
@@ -137,25 +175,45 @@ Room.prototype = {
                 console.log(this.state.players[i].percent);
                 if (this.state.players[i].percent < 100) {
                     hasIncompletePlayers = true;
+                    break;
                 }
-                break;
             }
         }
         if ((!hasIncompletePlayers) || (!hasTime)){
             this.gameOver();
         }
-    },
-
-
-    roundStart() {
-        io.sockets.to(this.state.name).emit('startGame', {});
     }
 
 };
 
+function getNewRoomName(cb) {
+
+    redis.get('room:current', function(err, id) {
+
+        if (err) return cb(err);
+
+        if (id) return cb(err, id);
+
+        setNewRoomName(function (err, id) {
+            cb(null, id);
+
+        });
+    })
+
+
+};
+function setNewRoomName(cb) {
+    redis.incr('room:current', function(err, id) {
+        if (err) return cb(err);
+        cb(null, id);
+    });
+};
+
 const Controller = {
 
-    getRoomToJoin() {
+    // find an existing game that's not yet started, or create a new one
+    getRoomToJoin(cb) {
+
         let r = null;
         for (let x = 0; x < rooms.length; x++) {
             let room = rooms[x];
@@ -169,37 +227,51 @@ const Controller = {
             rooms.push(r);
         }
         console.log(r.state.name);
-        return r;
+        cb(null,r);
+    },
+    getRoomById(id) {
+
+        for(let x=0; x < rooms.length;x++) {
+            const room = rooms[x];
+            if (room.state.number == id) {
+                return room;
+            }
+        }
+        return null;
     }
 };
 
-module.exports = (inout) => {
+module.exports = (inout, rclient) => {
      io = inout;
+    redis = rclient;
+
+     // user connects
      io.sockets.on('connection', (socket) => {
         console.log('a user connected');
 
+         // new player joins the game
         socket.on('join', (user) => {
 
+            // leave existing rooms (only one game at a time)
             if (user.room) {
                 io.socket.leave(user.room);
             }
-            let room = Controller.getRoomToJoin();
-            user.room = room.state.name;
-            user.number = room.state.number;
-            socket.username = user.name;
-            socket.join(room.state.name);
-            room.join(user);
+
+            Controller.getRoomToJoin(function(err, ret) {
+                let room = ret;
+                user.room = room.state.name;
+                user.number = room.state.number;
+                socket.username = user.name;
+                socket.join(room.state.name);
+                room.join(user);
+            });
         });
 
-        //socket.on('join' , Controller.join);
-        socket.on('getSentence', (user) => {
-            rooms[user.number].getSentence();
-        });
+         // user pressed key, update his progress
         socket.on('updatePercent' , (user) => {
-            rooms[user.number].updatePercent(user);
+            let r = Controller.getRoomById(user.number);
+            r.updatePercent(user);
         });
-        socket.on('roundStart' , (user) => {
-            rooms[user.number].roundStart();
-        });
+
     });
 };

@@ -74,7 +74,8 @@ app.use(function(err, req, res, next) {
   });
 });
 //Initialize the socket service through the http protocol and pass it into gameService to be configured.
-gameService(io);
+gameService(io, rClient);
+
 
 
 http.listen(3001, function(){
