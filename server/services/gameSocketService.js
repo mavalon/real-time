@@ -19,6 +19,70 @@ let Room = function(id) {
 
 };
 
+const Game = {
+
+    defaultState(number) {
+        let state = {
+            name: `game${number}`,
+            players: [],
+            ticks: GAME_MAX_SECONDS,
+            rank: 0,
+            sentence: null,
+            secondsRemaining: 0,
+            gameStarted: false,
+            number: number
+        }
+        return state;
+    },
+
+    gameKey(gameId) {
+        return `game:${gameId}`;
+    },
+
+    setSentence(gameState) {
+        const obj = JSON.parse(fs.readFileSync('./data/sentences.json', 'utf8'));
+        const idx = Math.floor((Math.random() * obj.length) + 1);
+        let sentence = (obj[idx]);
+
+        gameState.sentence = sentence;
+        // broadcast to current room
+        io.sockets.to(gameState.name).emit('setSentence', sentence);
+        return JSON.stringify(sentence);
+    },
+
+    gamePlayerKey(user) {
+        return `game:${user.number}:player:${user.id}`;
+    },
+
+    join(user, add, gameState) {
+
+        // todo: check if user exists in list before adding
+        //let _self = this;
+
+        // add user to list of players
+        Controller.setUser(add, user, user.number, function(err, added) {
+
+            if (added) {
+                //gameState.state.players.push(user);
+            }
+            // start countdown if first player in the room
+            if (gameState.secondsRemaining === 0) {
+                gameState.secondsRemaining = COUNTDOWN_SECONDS;
+                gameState.countdown(COUNTDOWN_SECONDS);
+            }
+
+            //broadcast all players to all players
+            //gameState.updatePlayers();
+
+            Controller.getGamePlayer(user, function(err, res) {
+                console.log(res);
+            });
+        });
+
+    }
+
+};
+
 Room.prototype = {
 
     socket: null,
@@ -79,6 +143,10 @@ Room.prototype = {
 
             //broadcast all players to all players
             _self.updatePlayers();
+
+            Controller.getGamePlayer(user, function(err, res) {
+                console.log(res);
+            });
         });
 
     },
@@ -203,6 +271,7 @@ function getCurrentRoomNumber(cb) {
 
 
 };
+
 function setNewRoomNumber(cb) {
     redis.incr('room:current', function(err, id) {
         if (err) return cb(err);
@@ -210,11 +279,70 @@ function setNewRoomNumber(cb) {
     });
 };
 
+function getSetRoom(number, state, cb) {
+
+    const key = Game.gameKey(number);
+    redis.exists(key, function(err, res) {
+        // create if doesn't exist
+       if (err || !(!!res)) {
+           // create game and return it
+           const key = `game:${number}:user:${user.id}`;
+           const args = [
+               "name", state.name,
+               "ticks", state.ticks,
+               "sentence", state.sentence,
+               "rank", state.rank,
+               "secondsRemaining", state.secondsRemaining,
+               "gameStarted", false,
+               "number", state.number
+           ];
+           redis.hmset(key, args, function(err, result) {
+               if (err) return cb(err);
+               cb(null, state);
+           });
+       } else {
+           // get / return game
+           redis.hgetall(key, function(err, result) {
+               if (err) return cb(err);
+               if (result.gameStarted) return cb(null, null);
+               cb(null, result);
+           });
+       }
+    });
+
+};
+
 const Controller = {
 
     // find an existing game that's not yet started, or create a new one
     getRoomToJoin(cb) {
 
+        getCurrentRoomNumber(function(err, id) {
+
+            const key = Game.gameKey(id);
+            // if exists return it
+            redis.exists(key, function(err, exists) {
+               if (!!exists) {
+                   redis.hgetall(key, function(err, result) {
+                       if (err) return cb(err);
+                       if (!!parseInt(result.gameStarted)) return cb(null, null);
+                       cb(null, result);
+                   });
+               } else {
+                   const args = Game.defaultState(id);
+                   args.sentence = Game.setSentence(args);
+                   redis.hmset(key, args, function(err, result) {
+                       if (err) return cb(err);
+                       cb(null, args);
+                   });
+               }
+            });
+
+            // else create it
+
+        });
+
+        /*
         let r = null;
         for (let x = 0; x < rooms.length; x++) {
             let room = rooms[x];
@@ -233,6 +361,7 @@ const Controller = {
             }
         });
 
+        */
 
     },
     canJoinRoom(userId, roomId, cb) {
@@ -261,11 +390,17 @@ const Controller = {
             if (err) return cb(err, false);
             cb(null, true);
         });
+    },
+    getGamePlayer(user, cb) {
+        const key = `game:${user.number}:user:${user.id}`;
+        redis.hgetall(key, function(err, res) {
+           cb(null, res);
+        });
     }
 };
 
 module.exports = (inout, rclient) => {
-     io = inout;
+    io = inout;
     redis = rclient;
 
      // user connects
@@ -281,17 +416,17 @@ module.exports = (inout, rclient) => {
             }
 
             Controller.getRoomToJoin(function(err, ret) {
-                let room = ret;
-                user.room = room.state.name;
-                user.number = room.state.number;
+                //let room = ret;
+                user.room = ret.name;
+                user.number = ret.number;
                 socket.username = user.name;
 
                 // todo: verify user is unique to this room
-                Controller.canJoinRoom(user.id, room.number, function(err, canJoin) {
+                Controller.canJoinRoom(user.id, ret.number, function(err, canJoin) {
                     if (canJoin) {
-                        socket.join(room.state.name);
+                        socket.join(ret.name);
                     }
-                    room.join(user, canJoin);
+                    Game.join(user, canJoin, ret);
                 });
 
 
@@ -304,5 +439,7 @@ module.exports = (inout, rclient) => {
             r.updatePercent(user);
         });
 
+
     });
 };
+
