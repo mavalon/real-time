@@ -32,6 +32,7 @@ RealTime.prototype = {
         room: 0
     },
 
+    // notify server that user has joined the game
     joinGame: function() {
         $('#race').html('');
         $('textarea').val('').attr('readonly', 'true');
@@ -42,6 +43,20 @@ RealTime.prototype = {
             percent: 0.5,
             rank: 0
         });
+    },
+
+    // keyup: update player's progress
+    setPercent: function() {
+        var sentenceLength = $('#sentence').text().length;
+        var typedLength = $('textarea').val().length;
+        var percentComplete = (typedLength / sentenceLength)*100;
+        if (percentComplete > 100) percentComplete = 100;
+        const data = {
+            percent: percentComplete,
+            id: rt.props.myId,
+            number: rt.props.number
+        };
+        socket.emit('updatePercent', data);
     },
 
     goToPanel: function() {
@@ -76,19 +91,6 @@ RealTime.prototype = {
         $('#race').html($(outer).html());
     },
 
-    setPercent: function() {
-        var sentenceLength = $('#sentence').text().length;
-        var typedLength = $('textarea').val().length;
-        var percentComplete = (typedLength / sentenceLength)*100;
-        if (percentComplete > 100) percentComplete = 100;
-        const data = {
-            percent: percentComplete,
-            id: rt.props.myId,
-            number: rt.props.number
-        };
-        socket.emit('updatePercent', data);
-    },
-
     getRandomColor: function() {
         return "rgb(" + this._r() + "," + this._r() + "," + this._r() + ")";
     },
@@ -114,10 +116,15 @@ RealTime.prototype = {
         return Math.floor(Math.random()*256);
     },
 
+    // set handlers for all broadcast messages from the server
     init: function() {
 
+        // get placeholder id -- replace with actual facebook id,
+        // or get next id from redis
         rt.props.idGen = new Generator();
         rt.props.myId = idGen.getId();
+
+        // if another user starts a game and is waiting for another player, alert all users who are not currently in a game
         socket.on('broadcastGame', function(data) {
             if (rt.props.currentPanel === 'lobby')
             {
@@ -129,6 +136,9 @@ RealTime.prototype = {
             }
 
         });
+
+        // currently, this is a countdown to the start of the game, but i will be removing this
+        // instead, we will notify when the game has started so that we can just remove the alert (if it hasn't already been hidden)
         socket.on('gameNotification', function(data) {
             $('.countdown').text(data.seconds);
             if (data.seconds > 0) {
@@ -144,6 +154,8 @@ RealTime.prototype = {
                 rt.startGame();
             }
         });
+
+        // a player's score has changed, update the progress bar
         socket.on('updatePlayer', function(data) {
             console.log(data);
             var player = data;
@@ -152,6 +164,7 @@ RealTime.prototype = {
             if (player.rank > 0) $(div).text(data.rank);
         });
 
+        // all players and their status is sent back to client, update all progress bars
         socket.on('updatePlayers', function(data) {
             console.log(data);
             rt.props.players = data.players;
@@ -160,11 +173,13 @@ RealTime.prototype = {
             rt.updateRace();
         });
 
+        // update sentence displayed -- this will probably change
         socket.on('setSentence', function(data) {
             if (!rt.props.sentence)  rt.props.sentence = (data);
             $('p.sentence,#sentence').text(rt.props.sentence.sentence);
         });
 
+        // notified that the game is over, change display
         socket.on('gameOver', rt.endGame);
     }
 
