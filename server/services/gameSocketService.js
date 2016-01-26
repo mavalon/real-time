@@ -6,12 +6,12 @@ const GAME_MAX_SECONDS = 60;
 let fs = require('fs');
 let io = null;
 let rooms = [];
-let redis = null;
+let redisClient = null;
 
 module.exports = (inout, rclient) => {
 
     io = inout;
-    redis = rclient;
+    redisClient = rclient;
 
     // user connects
     io.sockets.on('connection', (socket) => {
@@ -30,7 +30,7 @@ module.exports = (inout, rclient) => {
 
                 // add player record for the selected room
                 let key = `Game:${ret}:Player:${user.id}`;
-                redis.hmset(key, user, function(err, response) {
+                redisClient.hmset(key, user, function(err, response) {
 
                     // subscribe to the room
                     socket.username = user.name;
@@ -126,7 +126,7 @@ const Game = {
     addPlayerToGame(game, player, cb) {
 
         let key = `Game:${game}`;
-        redis.hgetall(key, function(err, state) {
+        redisClient.hgetall(key, function(err, state) {
 
             if (err) return cb(err);
 
@@ -135,7 +135,7 @@ const Game = {
             players.push(player);
             state.players = JSON.stringify(players);
 
-            redis.hmset(key, state, function(err, result) {
+            redisClient.hmset(key, state, function(err, result) {
 
                 state.players = JSON.parse(state.players);
                 state.sentence = JSON.parse(state.sentence);
@@ -164,7 +164,7 @@ const Game = {
         const gameName = `game${gameId}`;
         const key = `Game:${gameId}:Player:${userId}`;
 
-        redis.hgetall(key, function(err, result) {
+        redisClient.hgetall(key, function(err, result) {
 
             let player = result;
             player.percent = user.percent;
@@ -176,14 +176,17 @@ const Game = {
             if (user.percent >= 100) {
 
                 // get last rank from game
-                redis.hgetall(`Game:${gameId}`, function(e, res) {
+                redisClient.hgetall(`Game:${gameId}`, function(e, res) {
 
                     // increment and add to current player
                     let rank = parseInt(res.rank)+1;
                     res.rank = rank;
                     player.rank = rank;
 
-                    redis.hmset(`Game:${gameId}`, res, function(error, r) {
+                    redisClient.hmset(`Game:${gameId}`, res, function(error, r) {
+
+                        if (rank === 2) Game.gameOver(gameId);
+
                         // broadcast player
                         Game.saveProgress(key, gameName, player);
                     });
@@ -200,7 +203,7 @@ const Game = {
 
     saveProgress(key, gameName, player) {
 
-        redis.hmset(key, player, function(err, res) {
+        redisClient.hmset(key, player, function(err, res) {
             if (err) return;
 
             // broadcast to room player's current progress
@@ -211,22 +214,6 @@ const Game = {
             });
 
         });
-    },
-
-    isGameOver(gameId) {
-        let hasIncompletePlayers = false;
-        let hasTime = (this.state.ticks > 0);
-        if (hasTime) {
-            for(let i = 0; i < this.state.players.length; i++) {
-                if (this.state.players[i].percent < 100) {
-                    hasIncompletePlayers = true;
-                    break;
-                }
-            }
-        }
-        if ((!hasIncompletePlayers) || (!hasTime)){
-            Game.gameOver(gameId);
-        }
     },
 
     gameOver(gameId) {
@@ -240,13 +227,13 @@ const DB = {
     getRoomToJoin(cb) {
 
         // get first available game if any exist at all, and remove from available games, since it will no longer be available
-        redis.lpop('AvailableGames', function(err, item) {
+        redisClient.lpop('AvailableGames', function(err, item) {
 
             // no games exist
             if (!item) {
 
                 // get next room id
-                redis.incr('NextRoomId', function(err, id) {
+                redisClient.incr('NextRoomId', function(err, id) {
 
                     const args = Game.defaultState(id);
 
@@ -255,11 +242,11 @@ const DB = {
                     args.players = JSON.stringify(args.players);
 
                     // create game with default settings
-                    redis.hmset(`Game:${id}`, args, function(err, result) {
+                    redisClient.hmset(`Game:${id}`, args, function(err, result) {
                         if (err) return cb(err);
 
                         // make game available to all
-                        redis.rpush('AvailableGames', id, function(err, item) {
+                        redisClient.rpush('AvailableGames', id, function(err, item) {
                             cb(null, id, true);
                         });
 
@@ -285,7 +272,7 @@ const DB = {
         const key = `Game:${number}:Player:${user.id}`;
         const args = ["name", user.name, "color", user.color, "percent", user.percent, "rank", user.rank];
 
-        redis.hmset(key, args, function(err, res) {
+        redisClient.hmset(key, args, function(err, res) {
             if (err) return cb(err, false);
             cb(null, true);
         });
@@ -293,7 +280,7 @@ const DB = {
 
     getGamePlayer(user, cb) {
         const key = `Game:${user.number}:Player:${user.id}`;
-        redis.hgetall(key, function(err, res) {
+        redisClient.hgetall(key, function(err, res) {
            cb(null, res);
         });
     },
@@ -301,7 +288,7 @@ const DB = {
     setPlayerReady(data, cb) {
         const key = `Game:${data.gameId}`;
 
-        redis.hgetall(key, function(err, game) {
+        redisClient.hgetall(key, function(err, game) {
             if(err) return cb(err);
 
             let players = JSON.parse(game.players);
@@ -314,7 +301,7 @@ const DB = {
             }
 
             game.players = JSON.stringify(players);
-            redis.hmset(key, game, function(err, ret) {});
+            redisClient.hmset(key, game, function(err, ret) {});
 
             const playerCount = players.length;
             let readyCount = 0;

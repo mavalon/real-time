@@ -49,6 +49,7 @@ RealTime.prototype = {
     // join current active game (or start one)
     joinGame: function () {
         $('#race').html('');
+        $('#again, #inputField').removeClass('show');
         $('#status').text('Seeking Opponent');
         $('textarea').val('').attr('readonly', 'true');
 
@@ -167,6 +168,7 @@ RealTime.prototype = {
     endGame: function () {
         $('textarea').attr('readonly', true);
         $('#game').removeClass('playing');
+        $('#again').addClass('show');
         rt.updateState(GAME_OVER_MSG);
     },
 
