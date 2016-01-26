@@ -1,13 +1,15 @@
 'use strict';
 
 let socket = io();
-let idGen = new Generator();
 let rt;
 
 const PLAYING_MSG = 'Type away!';
 const GAME_OVER_MSG = 'Game over!';
+const SECONDS_TO_DISPLAY_ALERT = 10;
 
-$(document).ready(function() {
+let gameId = null;
+
+$(document).ready(function () {
 
     rt = new RealTime();
     rt.init();
@@ -17,6 +19,8 @@ $(document).ready(function() {
 
     // join game
     $('#enter,#again,#alert').click(rt.joinGame);
+
+    $('#ready').click(rt.setReady);
 
     // update user progress
     $('textarea').keyup(rt.setPercent);
@@ -45,58 +49,95 @@ RealTime.prototype = {
     },
 
     // join current active game (or start one)
-    joinGame: function() {
+    joinGame: function () {
         $('#race').html('');
+        $('#status').text('Seeking Opponent');
         $('textarea').val('').attr('readonly', 'true');
-        rt.state.myId = $('#id').val();
-        socket.emit('join', {
-            id: rt.state.myId,
-            name: $('#username').val(),
+
+        let username = $.trim($('#username').val());
+        let id = $.trim($('#id').val());
+
+        if (username.length === 0 || id.length === 0) {
+            $.get('/api/newguestid/', function (json) {
+                json = JSON.parse(json);
+                rt.emitJoin(`guest/${json.id}`, 'Guest');
+            });
+        } else {
+            rt.emitJoin(`fb/${id}`, username);
+        }
+
+    },
+
+    // notify ready to play
+    setReady() {
+        socket.emit('ready', { userId: rt.state.myId, gameId: rt.state.number });
+        $('#ready').removeClass('show');
+        rt.updateState('Preparing sentence');
+    },
+
+    // push to server
+    emitJoin(id, name) {
+
+        $('#loadUsers').addClass('show');
+        rt.state.myId = id;
+        let data = {
+            id: id,
+            name: name,
             color: rt.getRandomColor(),
             percent: 0.5, // .5 to show something initially
-            rank: 0
-        });
+            rank: 0,
+            ready: false
+        };
+        socket.emit('join', data);
+
     },
 
     // show/hide panels
-    goToPanel: function() {
+    goToPanel: function () {
 
         rt.state.currentPanel = $(this).data('panel');
         $('div').removeClass('show');
-        $('#'+rt.state.currentPanel).addClass('show');
+        $('#' + rt.state.currentPanel).addClass('show');
 
-        if (rt.state.currentPanel!=='lobby')
+        if (rt.state.currentPanel !== 'lobby')
             $('#alert').removeClass('show');
 
     },
 
     // display all player progress bars
-    updateRace: function() {
+    updateRace: function () {
 
         let html = '';
         let outer = document.createElement('div');
         $('p.sentence,#sentence').text(rt.state.sentence.sentence);
-        $.each(rt.state.players, function(index, user) {
+        $.each(rt.state.players, function (index, user) {
             let div = document.createElement('div');
             let pct = document.createElement('div');
             let lbl = document.createElement('div');
-            let w = this.percent+'%';
+            let w = this.percent + '%';
             let b = $(pct).css('width');
 
-            if (rt.state.myId===user.id) $(lbl).css('font-weight', 'bold');
+            if (rt.state.myId === user.id) $(lbl).css('font-weight', 'bold');
             $(lbl).addClass('label').text(this.name);
             $(pct).addClass('percentage').width(w).css('background-color', this.color);
             $(div).attr('id', user.id).addClass('bar').append(lbl).append(pct);
             $(outer).append(div);
         });
         $('#race').html($(outer).html());
+
+        if ($('#race').find('.bar').size() > 1)
+        {
+            $('#status').text('Click "Ready" to start the game');
+            $('.loading').removeClass('show');
+            $('#ready').addClass('show');
+        }
     },
 
     // broadcast player's score
-    setPercent: function() {
+    setPercent: function () {
         const sentenceLength = $('#sentence').text().length;
         const typedLength = $('textarea').val().length;
-        let percentComplete = (typedLength / sentenceLength)*100;
+        let percentComplete = (typedLength / sentenceLength) * 100;
         if (percentComplete > 100) percentComplete = 100;
         const data = {
             percent: percentComplete,
@@ -107,65 +148,62 @@ RealTime.prototype = {
     },
 
     // generate a random color
-    getRandomColor: function() {
+    getRandomColor: function () {
         return "rgb(" + this._r() + "," + this._r() + "," + this._r() + ")";
     },
 
     // race begins
-    startGame: function() {
+    startGame: function () {
 
         $('textarea').removeAttr('readonly').focus();
         $('#game').addClass('playing');
+        $('#inputField').addClass('show');
         rt.updateState(PLAYING_MSG);
     },
 
     // race ends
-    endGame: function() {
+    endGame: function () {
         $('textarea').attr('readonly', true);
         $('#game').removeClass('playing');
         rt.updateState(GAME_OVER_MSG);
     },
 
     // echo message
-    updateState: function(msg) {
+    updateState: function (msg) {
         $('#state').text(msg);
     },
 
     // random number
-    _r: function() {
-        return Math.floor(Math.random()*256);
+    _r: function () {
+        return Math.floor(Math.random() * 256);
     },
 
     // handle socket notifications and set initial state
-    init: function() {
-
-        rt.state.idGen = new Generator();
-        rt.state.myId = idGen.getId();
+    init: function () {
 
         // if another user starts a new game when current user is not playing a game,
         // display an alert inviting user to play real time game
-        socket.on('broadcastGame', function(data) {
-            if (rt.state.currentPanel === 'lobby')
-            {
+        socket.on('broadcastGame', function (data) {
+            if (rt.state.currentPanel === 'lobby') {
                 $('#alert').addClass('show');
-                console.log(data.seconds);
-                setTimeout(function() {
+                //console.log(data.seconds);
+                setTimeout(function () {
                     $('#alert').removeClass('show');
-                }, data.seconds*1000);
+                }, SECONDS_TO_DISPLAY_ALERT * 1000);
             }
 
         });
 
         // update countdown on the game view
-        socket.on('broadcastCountdown', function(data) {
+        socket.on('broadcastCountdown', function (data) {
             $('.countdown').text(data.seconds);
             if (data.seconds > 0) {
                 $('#status').addClass('counting');
 
                 /*
-                if (rt.state.currentPanel === 'lobby')
-                    $('#alert').addClass('show');
-                */
+                 if (rt.state.currentPanel === 'lobby')
+                 $('#alert').addClass('show');
+                 */
 
             } else {
                 $('#status').removeClass('counting');
@@ -176,16 +214,16 @@ RealTime.prototype = {
         });
 
         // update another player's progress bar
-        socket.on('updatePlayer', function(data) {
+        socket.on('updatePlayer', function (data) {
             console.log(data);
             let player = data;
-            let div = $('#'+player.id).find('.percentage');
-            $(div).width(player.percent+'%');
+            let div = $('#' + player.id).find('.percentage');
+            $(div).width(player.percent + '%');
             if (player.rank > 0) $(div).text(data.rank);
         });
 
         // reset view for all players' progress bars
-        socket.on('updatePlayers', function(data) {
+        socket.on('updatePlayers', function (data) {
             console.log(data);
             rt.state.players = data.players;
             rt.state.sentence = data.sentence;
@@ -194,7 +232,7 @@ RealTime.prototype = {
         });
 
         // set game sentence (broadcast to all users in a particular room)
-        socket.on('setSentence', function(data) {
+        socket.on('setSentence', function (data) {
             if (!rt.state.sentence)  rt.state.sentence = (data);
             $('p.sentence,#sentence').text(rt.state.sentence.sentence);
         });
@@ -202,21 +240,16 @@ RealTime.prototype = {
         // change status to game over (disable textarea)
         socket.on('gameOver', rt.endGame);
 
+        socket.on('startGame', rt.startGame);
+
     },
 
     // for get random user for testing purposes
-    loadRandomUser: function() {
-        $.get('/data/fbusers.json', function(json) {
-           let user = (json[Math.floor(Math.random() * json.length)]);
+    loadRandomUser: function () {
+        $.get('/data/fbusers.json', function (json) {
+            let user = (json[Math.floor(Math.random() * json.length)]);
             $('#id').val(user.id);
             $('#username').val(user.username);
         });
     }
-};
-
-// generate random id
-function Generator() {};
-Generator.prototype.rand =  Math.floor(Math.random() * 26) + Date.now();
-Generator.prototype.getId = function() {
-    return this.rand++;
 };

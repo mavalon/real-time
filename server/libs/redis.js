@@ -1,13 +1,23 @@
-module.exports = function(redis) {};
+'use strict';
 
-module.exports.de = function(addUser, user) {
+let env = require('../config/env');
+let redis = require('redis');
+let client = redis.createClient(env.redis.port, env.redis.host, env.redis.options);
 
-    if (!addUser) return cb(null, false);
-    const key = `game:${user.number}:user:${user.id}`;
-    const args = ["name", user.name, "color", user.color, "percent", user.percent, "rank", user.rank];
+var self = module.exports = {
 
-    redis.hmset(key, args, function(err, res) {
-        if (err) return cb(err, false);
-        cb(null, true);
-    });
+    getNewGuestId(cb) {
+
+        client.incr('LastGuestId', function(err, id) {
+            if (err) return cb(-1);
+            cb(id);
+        });
+
+    },
+
+    createNewRoom(cb) {
+
+
+
+    }
 }

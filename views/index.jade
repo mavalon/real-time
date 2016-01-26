@@ -22,15 +22,18 @@ block content
     div(id="game", data-step="3", class="panel")
         div(id="status", class="counting")
             div(id="state") Type away!
-            div(id="gameCountdown")
-                span(class="countdown") 60
-                |&nbsp; seconds to go...
+        div(class="loading" id="loadUsers")
         div(id="race")
-        p(class="sentence")
-        div
-            textarea(readonly)
-            div(id="sentence")
-            div(id="again",class="btn") Play another
+
+        div(id="ready",class="hdnpnl btn") Ready
+
+        div(id="inputField" class="hdnpnl input")
+            p(class="sentence")
+            div
+                textarea(readonly)
+                div(id="sentence")
+
+        div(id="again",class="hdnpnl btn") Play another
 
     section(id="alert", data-panel="game", class="join")
         | A live challenge is starting soon
