@@ -60,18 +60,20 @@ RealTime.prototype = {
         if (username.length === 0 || id.length === 0) {
             $.get('/api/newguestid/', function (json) {
                 json = JSON.parse(json);
-                rt.emitJoin(`guest/${json.id}`, 'Guest');
+                rt.emitJoin(`guest_${json.id}`, 'Guest');
             });
         } else {
-            rt.emitJoin(`fb/${id}`, username);
+            rt.emitJoin(`fb_${id}`, username);
         }
 
     },
 
     // notify ready to play
     setReady() {
+        console.log('--- ready ----');
         socket.emit('ready', { userId: rt.state.myId, gameId: rt.state.number });
         $('#ready').removeClass('show');
+        $('.loading').addClass('show');
         rt.updateState('Preparing sentence');
     },
 
@@ -155,9 +157,11 @@ RealTime.prototype = {
     // race begins
     startGame: function () {
 
+        console.log('------ start game -----');
         $('textarea').removeAttr('readonly').focus();
         $('#game').addClass('playing');
         $('#inputField').addClass('show');
+        $('.loading').removeClass('show');
         rt.updateState(PLAYING_MSG);
     },
 
@@ -170,7 +174,8 @@ RealTime.prototype = {
 
     // echo message
     updateState: function (msg) {
-        $('#state').text(msg);
+        console.log('---- update state -----');
+        $('#status').text(msg);
     },
 
     // random number
@@ -215,6 +220,7 @@ RealTime.prototype = {
 
         // update another player's progress bar
         socket.on('updatePlayer', function (data) {
+            console.log('---------- update player ----------');
             console.log(data);
             let player = data;
             let div = $('#' + player.id).find('.percentage');
