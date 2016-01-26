@@ -7,8 +7,6 @@ const PLAYING_MSG = 'Type away!';
 const GAME_OVER_MSG = 'Game over!';
 const SECONDS_TO_DISPLAY_ALERT = 10;
 
-let gameId = null;
-
 $(document).ready(function () {
 
     rt = new RealTime();
@@ -58,10 +56,10 @@ RealTime.prototype = {
         let id = $.trim($('#id').val());
 
         if (username.length === 0 || id.length === 0) {
-            $.get('/api/newguestid/', function (json) {
-                json = JSON.parse(json);
-                rt.emitJoin(`guest_${json.id}`, 'Guest');
-            });
+            id = Math.floor(Math.random() * 26) + Date.now();; //JSON.parse(json);
+            rt.emitJoin(`guest_${id}`, 'Guest');
+            //$.get('/api/newguestid/', function (json) {
+            //});
         } else {
             rt.emitJoin(`fb_${id}`, username);
         }

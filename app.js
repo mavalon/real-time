@@ -13,11 +13,16 @@ var bodyParser = require('body-parser');
 // redis sessions
 let env = require('./server/config/env');
 let redis = require('redis');
-let ExpressSession = require('express-session');
-let connectRedis = require('connect-redis');
-let RedisStore = connectRedis(ExpressSession);
-let rClient = redis.createClient(env.redis.port, env.redis.host, env.redis.options);
-let sessionStore = new RedisStore({client: rClient});
+//let ExpressSession = require('express-session');
+//let connectRedis = require('connect-redis');
+//let RedisStore = connectRedis(ExpressSession);
+const rClient = redis.createClient({
+    host: env.redis.host,
+    port: env.redis.port,
+    auth_pass: env.redis.password
+});
+//let rClient = redis.createClient(env.redis.port, env.redis.host, env.redis.options);
+//let sessionStore = new RedisStore({client: rClient});
 
 var routes = require('./routes/index');
 var users = require('./routes/users');

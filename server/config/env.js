@@ -7,6 +7,7 @@ let env = {
         options: {
             auth_pass: process.env.REDIS_PASSWORD || null // enable as needed
         },
+        password: process.env.REDIS_PASSWORD || null,
         db: 1 // selected Redis database
     }
 };

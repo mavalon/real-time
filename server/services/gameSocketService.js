@@ -165,20 +165,52 @@ const Game = {
         const key = `Game:${gameId}:Player:${userId}`;
 
         redis.hgetall(key, function(err, result) {
+
             let player = result;
             player.percent = user.percent;
+
+            if (parseInt(player.rank) > 0) return;
+
             player.rank = 0;
-            redis.hmset(key, player, function(err, res) {
-                if (err) return;
-                // broadcast to room player's current progress
-                io.sockets.to(gameName).emit('updatePlayer', {
-                    id: player.id,
-                    percent: player.percent,
-                    rank: player.rank
+
+            if (user.percent >= 100) {
+
+                // get last rank from game
+                redis.hgetall(`Game:${gameId}`, function(e, res) {
+
+                    // increment and add to current player
+                    let rank = parseInt(res.rank)+1;
+                    res.rank = rank;
+                    player.rank = rank;
+
+                    redis.hmset(`Game:${gameId}`, res, function(error, r) {
+                        // broadcast player
+                        Game.saveProgress(key, gameName, player);
+                    });
+
                 });
-            });
+
+            } else {
+                Game.saveProgress(key, gameName, player);
+            }
+
         });
 
+    },
+
+    saveProgress(key, gameName, player) {
+
+        redis.hmset(key, player, function(err, res) {
+            if (err) return;
+
+            // broadcast to room player's current progress
+            io.sockets.to(gameName).emit('updatePlayer', {
+                id: player.id,
+                percent: player.percent,
+                rank: player.rank
+            });
+
+        });
     },
 
     isGameOver(gameId) {
@@ -247,17 +279,6 @@ const DB = {
 
     },
 
-    getRoomById(id) {
-
-        for(let x=0; x < rooms.length;x++) {
-            const room = rooms[x];
-            if (room.state.number == id) {
-                return room;
-            }
-        }
-        return null;
-    },
-
     setUser(addUser, user, number, cb) {
 
         if (!addUser) return cb(null, false);
@@ -308,6 +329,7 @@ const DB = {
             }
 
         });
-    }
+    },
+
 
 };
