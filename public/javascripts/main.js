@@ -4,7 +4,7 @@ let socket = io();
 let rt;
 let to = null;
 
-const GAME_MAX_SECONDS = 15;
+const GAME_MAX_SECONDS = 60;
 const PLAYING_MSG = 'Type away!';
 const GAME_OVER_MSG = 'Game over!';
 const SECONDS_TO_DISPLAY_ALERT = 10;
@@ -56,6 +56,7 @@ RealTime.prototype = {
 
     // join current active game (or start one)
     joinGame: function () {
+        clearTimeout(to);
         $('#race').html('');
         $('#again, #inputField').removeClass('show');
         $('#status').text('Seeking Opponent');
@@ -171,10 +172,8 @@ RealTime.prototype = {
         $('.loading').removeClass('show');
         rt.updateState(PLAYING_MSG);
 
-
         rt.echoTime('start at');
 
-        clearTimeout(to);
         to = setTimeout(function() {
             socket.emit('endgame', rt.state.number);
         }, GAME_MAX_SECONDS * 1000);

@@ -7,7 +7,6 @@ let fs = require('fs');
 let io = null;
 let rooms = [];
 let redisClient = null;
-//let timers = [];
 
 module.exports = (inout, rclient) => {
 
@@ -22,32 +21,43 @@ module.exports = (inout, rclient) => {
 
             // leave existing rooms (only one game at a time)
             if (user.room) {
+                console.log('---- leave ----');
                 io.socket.leave(user.room);
             }
+            redisClient.keys(`*:Player:${user.id}`, function(err, result) {
 
-            Game.getRoomToJoin(function(err, ret, newgame) {
+                if (result.length > 0) {
 
-                if (err) return cb(err);
+                    const parts = result[0].split(':');
+                    Game.rebroadcastPlayers(parts[1], user, socket);
 
-                // add player record for the selected room
-                let key = `Game:${ret}:Player:${user.id}`;
-                redisClient.hmset(key, user, function(err, response) {
+                } else {
 
-                    // subscribe to the room
-                    socket.username = user.name;
-                    socket.join(`game${ret}`);
+                    Game.getRoomToJoin(function(err, ret, newgame) {
 
-                    Game.addPlayerToGame(ret, user, function(err, result) {
+                        if (err) return cb(err);
+
+                        // add player record for the selected room
+                        let key = `Game:${ret}:Player:${user.id}`;
+
+                        redisClient.hmset(key, user, function(err, response) {
+
+                            // subscribe to the room
+                            socket.username = user.id;
+                            socket.join(`game${ret}`);
+
+                            Game.addPlayerToGame(ret, user, function(err, result) {});
+
+                            if (newgame) {
+                                io.sockets.emit('broadcastGame', {});
+                            }
+
+                        })
 
                     });
-
-                    if (newgame) {
-                        io.sockets.emit('broadcastGame', {});
-                    }
-
-                })
-
+                }
             });
+
         });
 
         socket.on('ready', (data) => {
@@ -79,6 +89,7 @@ module.exports = (inout, rclient) => {
         });
 
     });
+
 };
 
 const Game = {
@@ -116,8 +127,10 @@ const Game = {
             if (err) return cb(err);
 
             let players = JSON.parse(state.players);
+            if (!Game.playerExists(players, player)) {
+                players.push(player);
+            }
 
-            players.push(player);
             state.players = JSON.stringify(players);
 
             redisClient.hmset(key, state, function(err, result) {
@@ -136,10 +149,38 @@ const Game = {
 
             });
 
-            //return JSON.stringify(players);
-
         });
 
+    },
+
+    rebroadcastPlayers(gameId, user, socket) {
+        redisClient.hgetall(`Game:${gameId}`, function(err, state) {
+
+            socket.username = user.id;
+            socket.join(`game${state.number}`);
+
+            state.players = JSON.parse(state.players);
+            state.sentence = JSON.parse(state.sentence);
+
+            io.sockets.to(state.name).emit('updatePlayers', {
+                players: state.players,
+                sentence: state.sentence,
+                roomNumber: state.number
+            });
+
+        });
+    },
+
+    playerExists(players, player) {
+
+        for(let x = 0; x < players.length; x++) {
+
+            let thisPlayer = players[x];
+            if (thisPlayer.id === player.id) {
+                return true;
+            }
+        }
+        return false;
     },
 
     updatePercent(user) {
