@@ -2,10 +2,13 @@
 
 let socket = io();
 let rt;
+let to = null;
 
+const GAME_MAX_SECONDS = 15;
 const PLAYING_MSG = 'Type away!';
 const GAME_OVER_MSG = 'Game over!';
 const SECONDS_TO_DISPLAY_ALERT = 10;
+
 
 $(document).ready(function () {
 
@@ -46,6 +49,11 @@ RealTime.prototype = {
         room: 0
     },
 
+    echoTime: function(msg) {
+        const nowTime = new Date(new Date().getTime()).toLocaleTimeString(); // 11:18:48 AM
+        console.log(msg + ': ' + nowTime);
+    },
+
     // join current active game (or start one)
     joinGame: function () {
         $('#race').html('');
@@ -69,7 +77,7 @@ RealTime.prototype = {
 
     // notify ready to play
     setReady() {
-        console.log('--- ready ----');
+        //console.log('--- ready ----');
         socket.emit('ready', { userId: rt.state.myId, gameId: rt.state.number });
         $('#ready').removeClass('show');
         $('.loading').addClass('show');
@@ -156,12 +164,21 @@ RealTime.prototype = {
     // race begins
     startGame: function () {
 
-        console.log('------ start game -----');
+        //console.log('------ start game -----');
         $('textarea').removeAttr('readonly').focus();
         $('#game').addClass('playing');
         $('#inputField').addClass('show');
         $('.loading').removeClass('show');
         rt.updateState(PLAYING_MSG);
+
+
+        rt.echoTime('start at');
+
+        clearTimeout(to);
+        to = setTimeout(function() {
+            socket.emit('endgame', rt.state.number);
+        }, GAME_MAX_SECONDS * 1000);
+
     },
 
     // race ends
@@ -170,11 +187,14 @@ RealTime.prototype = {
         $('#game').removeClass('playing');
         $('#again').addClass('show');
         rt.updateState(GAME_OVER_MSG);
+
+
+        rt.echoTime('ended at');
     },
 
     // echo message
     updateState: function (msg) {
-        console.log('---- update state -----');
+        //console.log('---- update state -----');
         $('#status').text(msg);
     },
 
@@ -220,8 +240,8 @@ RealTime.prototype = {
 
         // update another player's progress bar
         socket.on('updatePlayer', function (data) {
-            console.log('---------- update player ----------');
-            console.log(data);
+            //console.log('---------- update player ----------');
+            //console.log(data);
             let player = data;
             let div = $('#' + player.id).find('.percentage');
             $(div).width(player.percent + '%');
@@ -230,7 +250,7 @@ RealTime.prototype = {
 
         // reset view for all players' progress bars
         socket.on('updatePlayers', function (data) {
-            console.log(data);
+            //console.log(data);
             rt.state.players = data.players;
             rt.state.sentence = data.sentence;
             rt.state.number = data.roomNumber;

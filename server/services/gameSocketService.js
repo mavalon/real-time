@@ -1,12 +1,13 @@
 'use strict';
 
-const COUNTDOWN_SECONDS = 15;
+const COUNTDOWN_SECONDS = 60;
 const GAME_MAX_SECONDS = 60;
 
 let fs = require('fs');
 let io = null;
 let rooms = [];
 let redisClient = null;
+//let timers = [];
 
 module.exports = (inout, rclient) => {
 
@@ -24,7 +25,7 @@ module.exports = (inout, rclient) => {
                 io.socket.leave(user.room);
             }
 
-            DB.getRoomToJoin(function(err, ret, newgame) {
+            Game.getRoomToJoin(function(err, ret, newgame) {
 
                 if (err) return cb(err);
 
@@ -51,11 +52,13 @@ module.exports = (inout, rclient) => {
 
         socket.on('ready', (data) => {
 
-            DB.setPlayerReady(data, function(err, ready) {
+            Game.setPlayerReady(data, function(err, ready) {
                 if (ready) {
                     setTimeout(
                         function() {
                             io.sockets.to(`game${data.gameId}`).emit('startGame', { start: true });
+                            //let t = new Timer(data.gameId);
+                            //timers.push(t);
                         }, 2000);
 
                 }
@@ -65,7 +68,14 @@ module.exports = (inout, rclient) => {
 
         // user pressed key, update his progress
         socket.on('updatePercent' , (user) => {
+            //console.log(user.percent);
             Game.updatePercent(user);
+        });
+
+        socket.on('endgame', (gameId) => {
+
+            Game.gameOver(gameId);
+
         });
 
     });
@@ -98,31 +108,6 @@ const Game = {
         return JSON.stringify(sentence);
     },
 
-    join(user, add, gameState) {
-
-        // todo: check if user exists in list before adding
-        //let _self = this;
-
-        // add user to list of players
-        DB.setUser(add, user, user.number, function(err, added) {
-
-            if (added) {
-                //gameState.state.players.push(user);
-            }
-            // start countdown if first player in the room
-            if (gameState.secondsRemaining === 0) {
-                gameState.secondsRemaining = COUNTDOWN_SECONDS;
-                //gameState.countdown(COUNTDOWN_SECONDS);
-            }
-
-            //broadcast all players to all players
-            DB.getGamePlayer(user, function(err, res) {
-                console.log(res);
-            });
-        });
-
-    },
-
     addPlayerToGame(game, player, cb) {
 
         let key = `Game:${game}`;
@@ -137,7 +122,7 @@ const Game = {
 
             redisClient.hmset(key, state, function(err, result) {
 
-                state.players = JSON.parse(state.players);
+                state.players = players; //JSON.parse(state.players);
                 state.sentence = JSON.parse(state.sentence);
 
                 // broadcast players
@@ -166,6 +151,9 @@ const Game = {
 
         redisClient.hgetall(key, function(err, result) {
 
+            if (err) return err;
+            if (!result) return;
+
             let player = result;
             player.percent = user.percent;
 
@@ -185,23 +173,24 @@ const Game = {
 
                     redisClient.hmset(`Game:${gameId}`, res, function(error, r) {
 
-                        if (rank === 2) Game.gameOver(gameId);
-
                         // broadcast player
-                        Game.saveProgress(key, gameName, player);
+                        Game.saveProgress(key, gameName, player, function(err, res) {
+                            if (rank === 2) Game.gameOver(gameId);
+                        });
+
                     });
 
                 });
 
             } else {
-                Game.saveProgress(key, gameName, player);
+                Game.saveProgress(key, gameName, player, function(err, res) {});
             }
 
         });
 
     },
 
-    saveProgress(key, gameName, player) {
+    saveProgress(key, gameName, player, cb) {
 
         redisClient.hmset(key, player, function(err, res) {
             if (err) return;
@@ -213,15 +202,28 @@ const Game = {
                 rank: player.rank
             });
 
+            cb(err, res);
+
         });
     },
 
     gameOver(gameId) {
+        Game.deleteGame(gameId);
         io.sockets.to(`game${gameId}`).emit('gameOver', {});
-    }
-};
+    },
 
-const DB = {
+    deleteGame(gameId) {
+        const gameName = `Game:${gameId}`;
+        redisClient.keys(`${gameName}:*`, function(err, objects) {
+            //const keys = `${gameName} ${objects.join(' ')}`;
+            objects.push(gameName);
+            redisClient.del(objects, function(err, res){
+                //console.log(err);
+                //console.log(res);
+            });
+            //console.log(keys);
+        });
+    },
 
     // find an existing game that's not yet started, or create a new one
     getRoomToJoin(cb) {
@@ -266,25 +268,6 @@ const DB = {
 
     },
 
-    setUser(addUser, user, number, cb) {
-
-        if (!addUser) return cb(null, false);
-        const key = `Game:${number}:Player:${user.id}`;
-        const args = ["name", user.name, "color", user.color, "percent", user.percent, "rank", user.rank];
-
-        redisClient.hmset(key, args, function(err, res) {
-            if (err) return cb(err, false);
-            cb(null, true);
-        });
-    },
-
-    getGamePlayer(user, cb) {
-        const key = `Game:${user.number}:Player:${user.id}`;
-        redisClient.hgetall(key, function(err, res) {
-           cb(null, res);
-        });
-    },
-
     setPlayerReady(data, cb) {
         const key = `Game:${data.gameId}`;
 
@@ -316,7 +299,79 @@ const DB = {
             }
 
         });
-    },
-
+    }
 
 };
+
+/*
+
+ setUser(addUser, user, number, cb) {
+
+ if (!addUser) return cb(null, false);
+ const key = `Game:${number}:Player:${user.id}`;
+ const args = ["name", user.name, "color", user.color, "percent", user.percent, "rank", user.rank];
+
+ redisClient.hmset(key, args, function(err, res) {
+ if (err) return cb(err, false);
+ cb(null, true);
+ });
+ },
+
+ getGamePlayer(user, cb) {
+ const key = `Game:${user.number}:Player:${user.id}`;
+ redisClient.hgetall(key, function(err, res) {
+ cb(null, res);
+ });
+ },
+
+ join(user, add, gameState) {
+
+ // todo: check if user exists in list before adding
+ //let _self = this;
+
+ // add user to list of players
+ DB.setUser(add, user, user.number, function(err, added) {
+
+ if (added) {
+ //gameState.state.players.push(user);
+ }
+ // start countdown if first player in the room
+ if (gameState.secondsRemaining === 0) {
+ gameState.secondsRemaining = COUNTDOWN_SECONDS;
+ //gameState.countdown(COUNTDOWN_SECONDS);
+ }
+
+ //broadcast all players to all players
+ DB.getGamePlayer(user, function(err, res) {
+ // console.log(res);
+ });
+ });
+
+ },
+
+function Timer(id) {
+    this.init(id);
+};
+
+Timer.prototype = {
+    gameId: 0,
+    self: this,
+    to: null,
+    init: function(id) {
+        this.gameId = id;
+        this.countdown(GAME_MAX_SECONDS, this);
+    },
+    stop: function() {
+        clearTimeout(to);
+    },
+    countdown(seconds, self) {
+        self.to = setTimeout(function() {
+            if (seconds===0) {
+                Game.gameOver(self.gameId);
+            } else {
+                self.countdown(seconds-1, self);
+            }
+        }, 1000);
+    }
+};
+*/
