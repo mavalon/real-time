@@ -1,11 +1,10 @@
 'use strict';
 
-const COUNTDOWN_SECONDS = 60;
+const DATA_EXPIRATION_SECONDS = 60;
 const GAME_MAX_SECONDS = 60;
 
 let fs = require('fs');
 let io = null;
-let rooms = [];
 let redisClient = null;
 
 module.exports = (inout, rclient) => {
@@ -41,6 +40,8 @@ module.exports = (inout, rclient) => {
                         let key = `Game:${ret}:Player:${user.id}`;
 
                         redisClient.hmset(key, user, function(err, response) {
+
+                            redisClient.expire(key, DATA_EXPIRATION_SECONDS);
 
                             // subscribe to the room
                             socket.username = user.id;
@@ -135,6 +136,8 @@ const Game = {
 
             redisClient.hmset(key, state, function(err, result) {
 
+                redisClient.expire(key, DATA_EXPIRATION_SECONDS);
+
                 state.players = players; //JSON.parse(state.players);
                 state.sentence = JSON.parse(state.sentence);
 
@@ -205,15 +208,17 @@ const Game = {
             if (user.percent >= 100) {
 
                 // get last rank from game
-                redisClient.hgetall(`Game:${gameId}`, function(e, res) {
+                const gkey = `Game:${gameId}`;
+                redisClient.hgetall(gkey, function(e, res) {
 
                     // increment and add to current player
                     let rank = parseInt(res.rank)+1;
                     res.rank = rank;
                     player.rank = rank;
 
-                    redisClient.hmset(`Game:${gameId}`, res, function(error, r) {
+                    redisClient.hmset(gkey, res, function(error, r) {
 
+                        redisClient.expire(gkey, DATA_EXPIRATION_SECONDS);
                         // broadcast player
                         Game.saveProgress(key, gameName, player, function(err, res) {
                             if (rank === 2) Game.gameOver(gameId);
@@ -234,6 +239,7 @@ const Game = {
     saveProgress(key, gameName, player, cb) {
 
         redisClient.hmset(key, player, function(err, res) {
+            redisClient.expire(key, DATA_EXPIRATION_SECONDS);
             if (err) return;
 
             // broadcast to room player's current progress
@@ -285,7 +291,9 @@ const Game = {
                     args.players = JSON.stringify(args.players);
 
                     // create game with default settings
-                    redisClient.hmset(`Game:${id}`, args, function(err, result) {
+                    const key = `Game:${id}`;
+                    redisClient.hmset(key, args, function(err, result) {
+                        redisClient.expire(key, DATA_EXPIRATION_SECONDS);
                         if (err) return cb(err);
 
                         // make game available to all
@@ -325,7 +333,9 @@ const Game = {
             }
 
             game.players = JSON.stringify(players);
-            redisClient.hmset(key, game, function(err, ret) {});
+            redisClient.hmset(key, game, function(err, ret) {
+                redisClient.expire(key, DATA_EXPIRATION_SECONDS);
+            });
 
             const playerCount = players.length;
             let readyCount = 0;
@@ -343,76 +353,3 @@ const Game = {
     }
 
 };
-
-/*
-
- setUser(addUser, user, number, cb) {
-
- if (!addUser) return cb(null, false);
- const key = `Game:${number}:Player:${user.id}`;
- const args = ["name", user.name, "color", user.color, "percent", user.percent, "rank", user.rank];
-
- redisClient.hmset(key, args, function(err, res) {
- if (err) return cb(err, false);
- cb(null, true);
- });
- },
-
- getGamePlayer(user, cb) {
- const key = `Game:${user.number}:Player:${user.id}`;
- redisClient.hgetall(key, function(err, res) {
- cb(null, res);
- });
- },
-
- join(user, add, gameState) {
-
- // todo: check if user exists in list before adding
- //let _self = this;
-
- // add user to list of players
- DB.setUser(add, user, user.number, function(err, added) {
-
- if (added) {
- //gameState.state.players.push(user);
- }
- // start countdown if first player in the room
- if (gameState.secondsRemaining === 0) {
- gameState.secondsRemaining = COUNTDOWN_SECONDS;
- //gameState.countdown(COUNTDOWN_SECONDS);
- }
-
- //broadcast all players to all players
- DB.getGamePlayer(user, function(err, res) {
- // console.log(res);
- });
- });
-
- },
-
-function Timer(id) {
-    this.init(id);
-};
-
-Timer.prototype = {
-    gameId: 0,
-    self: this,
-    to: null,
-    init: function(id) {
-        this.gameId = id;
-        this.countdown(GAME_MAX_SECONDS, this);
-    },
-    stop: function() {
-        clearTimeout(to);
-    },
-    countdown(seconds, self) {
-        self.to = setTimeout(function() {
-            if (seconds===0) {
-                Game.gameOver(self.gameId);
-            } else {
-                self.countdown(seconds-1, self);
-            }
-        }, 1000);
-    }
-};
-*/
