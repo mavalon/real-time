@@ -1,6 +1,6 @@
 'use strict';
 
-const DATA_EXPIRATION_SECONDS = 60;
+const DATA_EXPIRATION_SECONDS = 86400;
 const GAME_MAX_SECONDS = 60;
 
 let fs = require('fs');
