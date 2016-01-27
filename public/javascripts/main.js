@@ -1,13 +1,39 @@
 'use strict';
 
-let socket = io();
-let rt;
-let to = null;
+let socket = io();                  // for sending/receiving messages to/from the server
+let rt;                             // game object ("rt" for "RealTime")
+let to = null;                      // timeout for game timer
 
-const GAME_MAX_SECONDS = 60;
+const GAME_MAX_SECONDS = 60;        // maximum time before a game time's out
+const SECONDS_TO_DISPLAY_ALERT = 10;// seconds to display an alert when server notifies that another player is waiting for an opponent
 const PLAYING_MSG = 'Type away!';
 const GAME_OVER_MSG = 'Game over!';
-const SECONDS_TO_DISPLAY_ALERT = 10;
+
+/*
+
+1) join a game
+
+ socket.emit('join', {playerId: string, username: string, color: string, percent: float, rank: int, ready: boolean});
+
+ data object's properties are:
+
+ defaults:
+    ready: false
+    percent: 0
+    rank: 0
+
+2) notify the server that the client is ready to play (i.e., clicked the "ready" button
+
+    socket.emit('ready', { playerId: string, gameId: int });
+
+3) listen for new players who are looking for a challenger (and display an alert)
+
+    socket.on('broadcastGame', function () {});
+
+
+
+
+ */
 
 
 $(document).ready(function () {
@@ -39,19 +65,13 @@ let RealTime = function (options) {
 
 RealTime.prototype = {
 
-    // state bag for current user's game/room/view
+    // state bag for current user's game/view
     state: {
-        players: [],
-        currentPanel: 'lobby',
-        gameId: 0,
-        myId: '',
-        sentence: null,
-        room: 0
-    },
-
-    echoTime: function(msg) {
-        const nowTime = new Date(new Date().getTime()).toLocaleTimeString(); // 11:18:48 AM
-        console.log(msg + ': ' + nowTime);
+        players: [],            // array of objects with the players' details
+        currentPanel: 'lobby',  // the view currently being displayed
+        gameId: 0,              // unique identifier for a game (will get this from the server, but need it to send messages back to the server)
+        playerId: '',           // this will be either facebook id (formatted: fb_{facebookId}) or guest (formatted guest_{uniqueId})
+        sentence: null          // sentence object
     },
 
     // join current active game (or start one)
@@ -79,7 +99,7 @@ RealTime.prototype = {
     // notify ready to play
     setReady() {
         //console.log('--- ready ----');
-        socket.emit('ready', { userId: rt.state.myId, gameId: rt.state.number });
+        socket.emit('ready', { playerId: rt.state.playerId, gameId: rt.state.gameId });
         $('#ready').removeClass('show');
         $('.loading').addClass('show');
         rt.updateState('Preparing sentence');
@@ -89,7 +109,7 @@ RealTime.prototype = {
     emitJoin(id, name) {
 
         $('#loadUsers').addClass('show');
-        rt.state.myId = id;
+        rt.state.playerId = id;
         let data = {
             id: id,
             name: name,
@@ -127,7 +147,7 @@ RealTime.prototype = {
             let w = this.percent + '%';
             let b = $(pct).css('width');
 
-            if (rt.state.myId === user.id) $(lbl).css('font-weight', 'bold');
+            if (rt.state.playerId === user.id) $(lbl).css('font-weight', 'bold');
             $(lbl).addClass('label').text(this.name);
             $(pct).addClass('percentage').width(w).css('background-color', this.color);
             $(div).attr('id', user.id).addClass('bar').append(lbl).append(pct);
@@ -151,8 +171,8 @@ RealTime.prototype = {
         if (percentComplete > 100) percentComplete = 100;
         const data = {
             percent: percentComplete,
-            id: rt.state.myId,
-            number: rt.state.number
+            id: rt.state.playerId,
+            gameId: rt.state.gameId
         };
         socket.emit('updatePercent', data);
     },
@@ -175,7 +195,7 @@ RealTime.prototype = {
         rt.echoTime('start at');
 
         to = setTimeout(function() {
-            socket.emit('endgame', rt.state.number);
+            socket.emit('endgame', rt.state.gameId);
         }, GAME_MAX_SECONDS * 1000);
 
     },
@@ -207,7 +227,8 @@ RealTime.prototype = {
 
         // if another user starts a new game when current user is not playing a game,
         // display an alert inviting user to play real time game
-        socket.on('broadcastGame', function (data) {
+        socket.on('broadcastGame', function () {
+
             if (rt.state.currentPanel === 'lobby') {
                 $('#alert').addClass('show');
                 //console.log(data.seconds);
@@ -218,29 +239,8 @@ RealTime.prototype = {
 
         });
 
-        // update countdown on the game view
-        socket.on('broadcastCountdown', function (data) {
-            $('.countdown').text(data.seconds);
-            if (data.seconds > 0) {
-                $('#status').addClass('counting');
-
-                /*
-                 if (rt.state.currentPanel === 'lobby')
-                 $('#alert').addClass('show');
-                 */
-
-            } else {
-                $('#status').removeClass('counting');
-                //$('#alert').removeClass('show');
-                $('textarea').removeAttr('readonly');
-                rt.startGame();
-            }
-        });
-
         // update another player's progress bar
         socket.on('updatePlayer', function (data) {
-            //console.log('---------- update player ----------');
-            //console.log(data);
             let player = data;
             let div = $('#' + player.id).find('.percentage');
             $(div).width(player.percent + '%');
@@ -249,10 +249,10 @@ RealTime.prototype = {
 
         // reset view for all players' progress bars
         socket.on('updatePlayers', function (data) {
-            //console.log(data);
+            // save the state so that you can pass these values back to the server at a later time
             rt.state.players = data.players;
             rt.state.sentence = data.sentence;
-            rt.state.number = data.roomNumber;
+            rt.state.gameId = data.gameId;
             rt.updateRace();
         });
 
@@ -265,16 +265,23 @@ RealTime.prototype = {
         // change status to game over (disable textarea)
         socket.on('gameOver', rt.endGame);
 
+        // start game
         socket.on('startGame', rt.startGame);
 
     },
 
-    // for get random user for testing purposes
+    // Josh can ignore this (for get random user for testing purposes)
     loadRandomUser: function () {
         $.get('/data/fbusers.json', function (json) {
             let user = (json[Math.floor(Math.random() * json.length)]);
             $('#id').val(user.id);
             $('#username').val(user.username);
         });
+    },
+
+    // Josh can ignore this
+    echoTime: function(msg) {
+        const nowTime = new Date(new Date().getTime()).toLocaleTimeString(); // 11:18:48 AM
+        console.log(msg + ': ' + nowTime);
     }
 };

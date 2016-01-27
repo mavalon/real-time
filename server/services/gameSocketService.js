@@ -95,16 +95,16 @@ module.exports = (inout, rclient) => {
 
 const Game = {
 
-    defaultState(number) {
+    defaultState(gameId) {
         let state = {
-            name: `game${number}`,
+            name: `game${gameId}`,
             players: [],
             ticks: GAME_MAX_SECONDS,
             rank: 0,
             sentence: null,
             secondsRemaining: 0,
             gameStarted: false,
-            number: number
+            gameId: gameId
         }
         return state;
     },
@@ -145,7 +145,7 @@ const Game = {
                 io.sockets.to(state.name).emit('updatePlayers', {
                     players: state.players,
                     sentence: state.sentence,
-                    roomNumber: state.number
+                    gameId: state.gameId
                 });
 
                 cb(err, state);
@@ -160,7 +160,7 @@ const Game = {
         redisClient.hgetall(`Game:${gameId}`, function(err, state) {
 
             socket.username = user.id;
-            socket.join(`game${state.number}`);
+            socket.join(`game${state.gameId}`);
 
             state.players = JSON.parse(state.players);
             state.sentence = JSON.parse(state.sentence);
@@ -168,7 +168,7 @@ const Game = {
             io.sockets.to(state.name).emit('updatePlayers', {
                 players: state.players,
                 sentence: state.sentence,
-                roomNumber: state.number
+                gameId: state.gameId
             });
 
         });
@@ -188,7 +188,7 @@ const Game = {
 
     updatePercent(user) {
 
-        const gameId = user.number;
+        const gameId = user.gameId;
         const userId = user.id;
         const gameName = `game${gameId}`;
         const key = `Game:${gameId}:Player:${userId}`;
