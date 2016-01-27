@@ -14,24 +14,29 @@ const GAME_OVER_MSG = 'Game over!';
 1) join a game
 
  socket.emit('join', {playerId: string, username: string, color: string, percent: float, rank: int, ready: boolean});
-
- data object's properties are:
+ data: http://jsoneditoronline.org/?id=918793abf2471017bb658e000653d656
 
  defaults:
     ready: false
     percent: 0
     rank: 0
 
-2) notify the server that the client is ready to play (i.e., clicked the "ready" button
+2) update player list
+
+    socket.on('updatePlayers', function (data) {})
+    data: http://www.jsoneditoronline.org/?id=39cc6c42e9a4c3ed8d469f6ef6973182
+
+
+3) notify the server that the client is ready to play (i.e., clicked the "ready" button
 
     socket.emit('ready', { playerId: string, gameId: int });
 
-3) listen for new players who are looking for a challenger (and display an alert)
+4) listen for new players who are looking for a challenger (and display an alert)
 
     socket.on('broadcastGame', function () {});
 
 
-
+5)
 
  */
 
@@ -119,6 +124,7 @@ RealTime.prototype = {
             ready: false
         };
         socket.emit('join', data);
+        console.log(JSON.stringify(data));
 
     },
 
@@ -249,6 +255,7 @@ RealTime.prototype = {
 
         // reset view for all players' progress bars
         socket.on('updatePlayers', function (data) {
+            console.log(JSON.stringify(data));
             // save the state so that you can pass these values back to the server at a later time
             rt.state.players = data.players;
             rt.state.sentence = data.sentence;

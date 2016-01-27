@@ -20,7 +20,6 @@ module.exports = (inout, rclient) => {
 
             // leave existing rooms (only one game at a time)
             if (user.room) {
-                console.log('---- leave ----');
                 io.socket.leave(user.room);
             }
             redisClient.keys(`*:Player:${user.id}`, function(err, result) {
