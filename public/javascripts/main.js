@@ -21,22 +21,54 @@ const GAME_OVER_MSG = 'Game over!';
     percent: 0
     rank: 0
 
+
+
 2) update player list
 
     socket.on('updatePlayers', function (data) {})
     data: http://www.jsoneditoronline.org/?id=39cc6c42e9a4c3ed8d469f6ef6973182
 
 
-3) notify the server that the client is ready to play (i.e., clicked the "ready" button
-
-    socket.emit('ready', { playerId: string, gameId: int });
-
-4) listen for new players who are looking for a challenger (and display an alert)
+3) listen for new players who are looking for a challenger (and display an alert)
 
     socket.on('broadcastGame', function () {});
 
 
-5)
+
+4) notify the server that the client is ready to play (i.e., clicked the "ready" button
+
+    socket.emit('ready', { playerId: string, gameId: int });
+
+
+
+
+5) update percent on keyup (or text changed)
+
+     socket.emit('updatePercent', {percent: float, playerId: string, gameId: int);
+
+
+
+
+6) update player progress
+
+    socket.on('updatePlayer', function ({id: string, percent: float, rank: int}) {});
+    data returned: http://www.jsoneditoronline.org/?id=1296b0b7e33be6cc1368e6d32f30a0bf
+
+
+
+
+7) you start a timer when the game starts.  when the maximum time has been reached, notify the server
+
+    socket.emit('endgame', gameId);
+
+
+
+8) get notification that game is over
+
+    socket.on('gameOver', function() {});
+
+
+
 
  */
 
@@ -124,7 +156,7 @@ RealTime.prototype = {
             ready: false
         };
         socket.emit('join', data);
-        console.log(JSON.stringify(data));
+        //console.log(JSON.stringify(data));
 
     },
 
@@ -177,10 +209,11 @@ RealTime.prototype = {
         if (percentComplete > 100) percentComplete = 100;
         const data = {
             percent: percentComplete,
-            id: rt.state.playerId,
+            playerId: rt.state.playerId,
             gameId: rt.state.gameId
         };
         socket.emit('updatePercent', data);
+        //console.log(JSON.stringify(data));
     },
 
     // generate a random color
@@ -248,6 +281,7 @@ RealTime.prototype = {
         // update another player's progress bar
         socket.on('updatePlayer', function (data) {
             let player = data;
+            console.log(JSON.stringify(data));
             let div = $('#' + player.id).find('.percentage');
             $(div).width(player.percent + '%');
             if (player.rank > 0) $(div).text(data.rank);
@@ -255,7 +289,7 @@ RealTime.prototype = {
 
         // reset view for all players' progress bars
         socket.on('updatePlayers', function (data) {
-            console.log(JSON.stringify(data));
+            //console.log(JSON.stringify(data));
             // save the state so that you can pass these values back to the server at a later time
             rt.state.players = data.players;
             rt.state.sentence = data.sentence;

@@ -188,9 +188,9 @@ const Game = {
     updatePercent(user) {
 
         const gameId = user.gameId;
-        const userId = user.id;
+        const playerId = user.playerId;
         const gameName = `game${gameId}`;
-        const key = `Game:${gameId}:Player:${userId}`;
+        const key = `Game:${gameId}:Player:${playerId}`;
 
         redisClient.hgetall(key, function(err, result) {
 
@@ -325,7 +325,7 @@ const Game = {
             let players = JSON.parse(game.players);
             for(let n = 0; n < players.length; n++) {
 
-                if (players[n].id === data.userId) {
+                if (players[n].id === data.playerId) {
                     players[n].ready = true;
                     break;
                 }
@@ -337,8 +337,11 @@ const Game = {
             });
 
             const playerCount = players.length;
+            console.log(players);
             let readyCount = 0;
             for(let n = 0; n < players.length; n++) {
+                console.log('ready');
+                console.log(players[n]);
                 if (players[n].ready) {
                     readyCount++;
                 }
